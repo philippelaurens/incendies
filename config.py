@@ -1,5 +1,5 @@
 from pathlib import Path
 
-
-DATA_RAW_DIR = Path("data/data_raw")
-DATA_PROCESSED_DIR = Path("data/data_processed")
+ROOT = Path(__file__).parent
+DATA_RAW_DIR = ROOT / "data" / "data_raw"
+DATA_PROCESSED_DIR = ROOT / "data" / "data_processed"
