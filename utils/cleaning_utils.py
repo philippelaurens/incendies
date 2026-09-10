@@ -197,9 +197,11 @@ def normalize_string(text):
     return text_no_accents
 
 
-def normalize_all_text_columns(df):
+def normalize_text_columns_cells(df):
     """
     Applique la normalisation à toutes les colonnes de type 'object' ou 'string' d'un DataFrame.
+    parcourt et modifie les données à l'intérieur des colonnes (les lignes du tableau)
+    ne modifie pas les noms des colonnes (les en-têtes).
     """
     string_cols = df.select_dtypes(include=['object', 'string']).columns.tolist()
 
@@ -211,6 +213,47 @@ def normalize_all_text_columns(df):
 
     return df
 
+
+def normalize_columns_names(df):
+    """
+    Nettoie et normalise les noms de colonnes d'un DataFrame en format snake_case.
+    Idéal pour l'exportation vers une base de données comme PostgreSQL.
+
+    Paramètres :
+    df (pandas.DataFrame) : Le DataFrame dont on veut nettoyer les colonnes.
+
+    Retourne :
+    pandas.DataFrame : Le DataFrame avec les noms de colonnes modifiés.
+    """
+    nouveaux_noms = []
+
+    for col in df.columns:
+        # Convertit en chaîne de caractères pour éviter les erreurs
+        col = str(col)
+
+        # Supprime les accents
+        # NFKD sépare les caractères de leurs accents, puis on encode en ASCII pour ignorer les accents
+        col = unicodedata.normalize('NFKD', col).encode('ASCII', 'ignore').decode('utf-8')
+
+        # Met tout en minuscules
+        col = col.lower()
+
+        # Remplace les espaces et les tirets par des underscores
+        col = re.sub(r'[ -]+', '_', col)
+
+        # Supprime tous les caractères qui ne sont pas des lettres, des chiffres ou des underscores
+        col = re.sub(r'[^a-z0-9_]', '', col)
+
+        # Retire les underscores en début ou fin de nom s'il y en a
+        col = col.strip('_')
+
+        nouveaux_noms.append(col)
+
+    # Appliquer la nouvelle liste de noms au DataFrame
+    df.columns = nouveaux_noms
+    print(f"Nouveaux noms de colonnes : {df.columns.tolist()}")
+
+    return df
 
 # ===============================
 # Exemple rapide d'utilisation
