@@ -294,9 +294,9 @@ def optimize_numeric_column(df, column_name):
         df[column_name] = pd.to_numeric(df[column_name], downcast='float')
 
     # Affichage des résultats
-    poids_apres = df[column_name].memory_usage(deep=True) / 1024
-    nouveau_type = df[column_name].dtype
-    print(f"{column_name} : {poids_avant:.2f} KB -> {poids_apres:.2f} KB (Type: {nouveau_type})")
+    # poids_apres = df[column_name].memory_usage(deep=True) / 1024
+    # nouveau_type = df[column_name].dtype
+    # print(f"{column_name} : {poids_avant:.2f} KB -> {poids_apres:.2f} KB (Type: {nouveau_type})")
 
     return df
 
