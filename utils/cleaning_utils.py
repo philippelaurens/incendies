@@ -255,6 +255,52 @@ def normalize_columns_names(df):
 
     return df
 
+
+def optimize_numeric_column(df, column_name):
+    """
+    Optimise la mémoire d'une colonne numérique en convertissant les faux floats
+    (entiers contenant des NaN) vers des types entiers 'Nullable' (Int8, Int16, etc.).
+    """
+    poids_avant = df[column_name].memory_usage(deep=True) / 1024
+
+    # 1. On isole les valeurs réelles (sans les NaN) pour analyser le contenu
+    valeurs_reelles = df[column_name].dropna()
+
+    # Si la colonne est entièrement vide, on passe à la suivante
+    if len(valeurs_reelles) == 0:
+        return df
+
+    # 2. On vérifie si toutes les valeurs réelles sont de parfaits entiers
+    # (ex: 15.0 == 15 -> Vrai)
+    est_entier = (valeurs_reelles == valeurs_reelles.astype(int)).all()
+
+    if est_entier:
+        # On trouve le minimum et le maximum pour choisir la taille mémoire idéale
+        v_min = valeurs_reelles.min()
+        v_max = valeurs_reelles.max()
+
+        # 3. On choisit le type d'entier "Nullable" (avec MAJUSCULE) approprié
+        if v_min > np.iinfo(np.int8).min and v_max < np.iinfo(np.int8).max:
+            df[column_name] = df[column_name].astype('Int8')
+        elif v_min > np.iinfo(np.int16).min and v_max < np.iinfo(np.int16).max:
+            df[column_name] = df[column_name].astype('Int16')
+        elif v_min > np.iinfo(np.int32).min and v_max < np.iinfo(np.int32).max:
+            df[column_name] = df[column_name].astype('Int32')
+        else:
+            df[column_name] = df[column_name].astype('Int64')
+
+    else:
+        # 4. Si ce sont de vrais nombres à virgule, on les réduit en float32
+        df[column_name] = pd.to_numeric(df[column_name], downcast='float')
+
+    # Affichage des résultats
+    poids_apres = df[column_name].memory_usage(deep=True) / 1024
+    nouveau_type = df[column_name].dtype
+    print(f"{column_name} : {poids_avant:.2f} KB -> {poids_apres:.2f} KB (Type: {nouveau_type})")
+
+    return df
+
+
 # ===============================
 # Exemple rapide d'utilisation
 # ===============================
