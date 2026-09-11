@@ -1,19 +1,3 @@
-# incendies
-
-## Sources
-
-[data/data_geo_raw/communes-france-2025.csv](https://www.data.gouv.fr/datasets/liste-des-communes-de-france-code-insee-codes-postaux-epci-population-superficie-62-indicateurs?resource_id=d498e08d-8396-48ec-862e-867ac791bed4)
-
-
-Format du jeu de données
-Fichier GeoJSON (FeatureCollection), encodé en utf-8. Chaque commune est une « feature » :
-
-la géométrie est le polygone (ou multipolygone) simplifié du territoire communal, en coordonnées WGS84 (EPSG:4326), longitude/latitude ;
-les propriétés (champ properties) contiennent les données décrites ci-dessous.
-Certaines communes n'ont pas de géométrie (geometry à null) : DROM-COM dont Mayotte, et communes sans contour disponible.
-
-## structure
-
 .
 ├── README.md
 ├── __pycache__
@@ -59,4 +43,3 @@ Certaines communes n'ont pas de géométrie (geometry à null) : DROM-COM dont M
 └── uv.lock
 
 13 directories, 30 files
-
