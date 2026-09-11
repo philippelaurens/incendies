@@ -1,62 +1,62 @@
 # incendies
 
-## Sources
+## Objectif
 
-[data/data_geo_raw/communes-france-2025.csv](https://www.data.gouv.fr/datasets/liste-des-communes-de-france-code-insee-codes-postaux-epci-population-superficie-62-indicateurs?resource_id=d498e08d-8396-48ec-862e-867ac791bed4)
+prédiction du risque d'incendie
+
+## Chemin de la donnée
+data_raw > data_clean > data_processed
+
+---
+---
+---
+
+## Data prep
+
+### bdiff.ipynb - Liste des incendies
+
+analyse préliminiaire et nettoyage des données de [BDIFF](https://bdiff.agriculture.gouv.fr/incendies)
+
+**input** : DATA_RAW_DIR    (/data/data_raw/)<br>
+**output** : DATA_CLEAN_DIR (/data/data_clean/)
+
+---
 
 
-Format du jeu de données
-Fichier GeoJSON (FeatureCollection), encodé en utf-8. Chaque commune est une « feature » :
+### communes.ipynb - Liste des communes (sans polygones)
 
-la géométrie est le polygone (ou multipolygone) simplifié du territoire communal, en coordonnées WGS84 (EPSG:4326), longitude/latitude ;
-les propriétés (champ properties) contiennent les données décrites ci-dessous.
-Certaines communes n'ont pas de géométrie (geometry à null) : DROM-COM dont Mayotte, et communes sans contour disponible.
+analyse préliminiaire et nettoyage des données de [Liste des communes de France 2026](https://www.data.gouv.fr/datasets/liste-des-communes-de-france-code-insee-codes-postaux-epci-population-superficie-62-indicateurs)
 
-## structure
+[téléchargement direct](https://www.data.gouv.fr/datasets/liste-des-communes-de-france-code-insee-codes-postaux-epci-population-superficie-62-indicateurs?resource_id=c63fd0b1-7987-46f6-b779-8b3ed889090c)
 
-.
-├── README.md
-├── __pycache__
-│   └── config.cpython-311.pyc
-├── data
-│   ├── data_clean
-│   │   └── incendies.parquet
-│   ├── data_geo_clean
-│   ├── data_geo_raw
-│   │   ├── communes-france-2025.csv
-│   │   └── communes-france-avec-polygon-2026.geojson
-│   ├── data_processed
-│   └── data_raw
-│       ├── Incendies1971.csv
-│       ├── Incendies1976.csv
-│       ├── Incendies1981.csv
-│       ├── Incendies1986.csv
-│       ├── Incendies1991.csv
-│       ├── Incendies1996.csv
-│       ├── Incendies2001.csv
-│       ├── Incendies2006.csv
-│       ├── Incendies2011.csv
-│       ├── Incendies2016.csv
-│       └── Incendies2021.csv
-├── notebooks
-│   ├── analyse.ipynb
-│   ├── commune.ipynb
-│   ├── create_db_commune.ipynb
-│   ├── create_db_incendie.ipynb
-│   └── eda.ipynb
-├── pyproject.toml
-├── src
-│   ├── __pycache__
-│   │   └── config.cpython-311.pyc
-│   └── config.py
-├── structure.md
-├── utils
-│   ├── __pycache__
-│   │   ├── analysis_utils.cpython-311.pyc
-│   │   └── cleaning_utils.cpython-311.pyc
-│   ├── analysis_utils.py
-│   └── cleaning_utils.py
-└── uv.lock
 
-13 directories, 30 files
+**input** : GEO_DATA_RAW_DIR    (/data/geo_data_raw/)<br>
+**output** : GEO_DATA_CLEAN_DIR (/data/geo_data_clean/)
 
+---
+
+### Sources inutilisée pour le moment (avec polygones)
+
+[Liste des communes de France 2026 ... au format geojson](https://www.data.gouv.fr/datasets/liste-des-communes-de-france-code-insee-codes-postaux-epci-population-superficie-62-indicateurs?resource_id=d498e08d-8396-48ec-862e-867ac791bed4)
+
+[téléchargement direct](https://www.data.gouv.fr/datasets/liste-des-communes-de-france-code-insee-codes-postaux-epci-population-superficie-62-indicateurs?resource_id=d498e08d-8396-48ec-862e-867ac791bed4)
+
+
+## Data analyse
+
+### eda.ipynb
+
+...
+
+---
+---
+---
+
+## Définition de la target
+...
+
+## Modelisation
+...
+
+## structure du projets
+...
