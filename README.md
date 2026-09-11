@@ -4,6 +4,13 @@
 
 prédiction du risque d'incendie
 
+## Importation des données
+
+Il faut commencer par importer les jeux de données ci-dessous :
+
+- [BDIFF](https://bdiff.agriculture.gouv.fr/incendies)
+- [Liste des communes de France 2026](https://www.data.gouv.fr/datasets/liste-des-communes-de-france-code-insee-codes-postaux-epci-population-superficie-62-indicateurs?resource_id=c63fd0b1-7987-46f6-b779-8b3ed889090c)
+
 ## Chemin de la donnée
 data_raw > data_clean > data_processed
 
@@ -17,8 +24,8 @@ data_raw > data_clean > data_processed
 
 analyse préliminiaire et nettoyage des données de [BDIFF](https://bdiff.agriculture.gouv.fr/incendies)
 
-**input** : DATA_RAW_DIR    (/data/data_raw/)<br>
-**output** : DATA_CLEAN_DIR (/data/data_clean/)
+**input** : DATA_RAW_DIR    (/data/bdiff_data_raw/)<br>
+**output** : DATA_CLEAN_DIR (/data/bdiff_data_clean/)
 
 ---
 
