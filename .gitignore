@@ -18,3 +18,6 @@ __pycache__/
 # Fichiers systèmes (Windows / macOS)
 .DS_Store
 
+# Fichiers environment
+.env
+.vscode
