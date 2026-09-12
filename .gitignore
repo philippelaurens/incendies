@@ -1,4 +1,20 @@
-/data_raw
-/dat_processed
+# __pycache__ à la racine ou dans n'importe quel sous-dossier
+**/__pycache__/
+__pycache__/
 
+# fichiers compilés Python
+*.py[cod]
+*$py.class
+
+
+# Données locales volumineuses
+# data/
+
+# Fichiers générés temporaires ou rapports web
+*.html
+*.img
+
+
+# Fichiers systèmes (Windows / macOS)
+.DS_Store
 
