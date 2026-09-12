@@ -23,7 +23,7 @@ with get_conn() as conn:
         cur.execute(
             """
             SELECT c.nom_standard, l.latitude, l.longitude, floor(random() * 10 + 1)::int AS valeur
-            FROM commune c, localisation l
+            FROM incendies.commune c, incendies.localisation l
             WHERE c.localisation=l.id_localisation
             """
         )
