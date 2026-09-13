@@ -777,6 +777,18 @@ wheels = [
 ]
 
 [[package]]
+name = "holidays"
+version = "0.104"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/71/23/9d0f6c31dda49b50efecdac7b76d979fa37b6267e55bab4907a58f02e8ac/holidays-0.104.tar.gz", hash = "sha256:7e327b255dee3de3c8f7fef58f835ccb7685881ea72176697ff60269c57743b2", size = 1021650, upload-time = "2026-09-07T17:49:30.506Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/63/63/e6d7af3e7cd7ce095aee210204fce64b2ce5164c0c3c79d70e335837886c/holidays-0.104-py3-none-any.whl", hash = "sha256:e0db9ff1d5588e3349bf2de6a597421e39cb7299b64a015170a0a0886940c384", size = 1619592, upload-time = "2026-09-07T17:49:28.243Z" },
+]
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -821,6 +833,7 @@ dependencies = [
     { name = "chardet" },
     { name = "folium" },
     { name = "geopandas" },
+    { name = "holidays" },
     { name = "jupyter" },
     { name = "matplotlib" },
     { name = "pandas" },
@@ -830,6 +843,7 @@ dependencies = [
     { name = "ruff" },
     { name = "scikit-learn" },
     { name = "seaborn" },
+    { name = "vacances-scolaires-france" },
 ]
 
 [package.metadata]
@@ -837,6 +851,7 @@ requires-dist = [
     { name = "chardet", specifier = ">=7.6.0" },
     { name = "folium", specifier = ">=0.20.0" },
     { name = "geopandas", specifier = ">=1.1.4" },
+    { name = "holidays", specifier = ">=0.104" },
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "pandas", specifier = ">=3.0.5" },
@@ -846,6 +861,7 @@ requires-dist = [
     { name = "ruff", specifier = ">=0.16.6" },
     { name = "scikit-learn", specifier = ">=1.9.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
+    { name = "vacances-scolaires-france", specifier = ">=0.12.0" },
 ]
 
 [[package]]
@@ -3176,6 +3192,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", size = 433602, upload-time = "2026-05-07T16:13:18.596Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
+]
+
+[[package]]
+name = "vacances-scolaires-france"
+version = "0.12.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/09/2c/7bbff75fc64a0cecbd800232a94893e64b6006131aae4e0a890fe86a4d54/vacances_scolaires_france-0.12.0.tar.gz", hash = "sha256:651e25936212becf0f0ff62dc11ca79dbebf7cdceeb8c5182a933340b0bd0c0e", size = 50243, upload-time = "2026-08-26T13:16:56.715Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/37/95eb4f3ca52fe09719f8ba493ef9cc95ae0f8e1cb4f959b9171c1b4115b4/vacances_scolaires_france-0.12.0-py3-none-any.whl", hash = "sha256:eeb279f0e29e81cdca42fec821fa3b4e3405490accb1b0aa28689e761d76e7f8", size = 49640, upload-time = "2026-08-26T13:16:55.567Z" },
 ]
 
 [[package]]

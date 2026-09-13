@@ -8,6 +8,7 @@ dependencies = [
     "chardet>=7.6.0",
     "folium>=0.20.0",
     "geopandas>=1.1.4",
+    "holidays>=0.104",
     "jupyter>=1.1.1",
     "matplotlib>=3.11.1",
     "pandas>=3.0.5",
@@ -17,4 +18,5 @@ dependencies = [
     "ruff>=0.16.6",
     "scikit-learn>=1.9.0",
     "seaborn>=0.13.2",
+    "vacances-scolaires-france>=0.12.0",
 ]
