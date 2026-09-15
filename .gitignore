@@ -1,4 +1,3 @@
-
 # __pycache__ à la racine ou dans n'importe quel sous-dossier
 **/__pycache__/
 __pycache__/
@@ -19,6 +18,11 @@ data/
 # Fichiers systèmes (Windows / macOS)
 .DS_Store
 Thumbs.db
+
+# Fichiers environment
+.env
+.vscode
+
 
 
 mlruns/
