@@ -19,3 +19,8 @@ data/
 # Fichiers systèmes (Windows / macOS)
 .DS_Store
 Thumbs.db
+
+
+mlruns/
+notebooks/mlruns/
+*.db
