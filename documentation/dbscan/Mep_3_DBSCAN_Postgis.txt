@@ -1,0 +1,637 @@
+
+  o Mise à jour de la table localisation :
+
+        ALTER TABLE localisation
+          ADD COLUMN IF NOT EXISTS geom geometry(Point, 4326)
+            GENERATED ALWAYS AS (
+              ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
+            ) STORED,
+          ADD COLUMN IF NOT EXISTS geom_m geometry(Point, 2154)
+            GENERATED ALWAYS AS (
+            ST_Transform(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326), 2154)
+          ) STORED;
+          
+        CREATE INDEX IF NOT EXISTS localisation_geom_m_gix
+          ON localisation USING GIST (geom_m);
+        
+      Note : Postgres calcule geom_m à partir de longitude et latitude, et enregistre le résultat. On ne fait plus les UPDATE : si lon/lat changent, geom_m est recalculé tout seul.
+
+      Note : sklearn n’a pas besoin de deux colonnes supplémentaires qui utilisent les capacités géométiques de PostGis, mais elles seront utiles plus tard pour faire des requêtes du type "points dans un rayon de 1 km" en SQL.
+      
+          SELECT l.*
+          FROM localisation l
+          WHERE ST_DWithin(
+            l.geom_m,
+            ST_Transform(ST_SetSRID(ST_MakePoint(:lon, :lat), 4326), 2154),
+            1000
+          );
+
+      Note : La fonction ST_MakePoint(longitude, latitude) fabrique un point à partir des deux nombres (longitude, latitude). Le point, tout seul, n’a pas de système de coordonnées.
+        
+        ¤ 4326 : ST_SetSRID lui dit que les nombres sont des degrés WGS84 », c’est le code 4326. 4326 est le GPS classique (degrés, monde entier, cartes web) : on ne s’en sert pas pour mesurer des mètres de façon fiable.
+
+        ¤ 2154 : c’est Lambert-93, le CRS métrique de la France métropolitaine : les coordonnées ne sont plus des degrés mais des mètres (Lambert-93).
+        
+
+  o DBSCAN groupe les points qui sont assez proches les uns des autres : autour de chaque incendie, il cherche s’il y a au moins min_samples autres feux dans un rayon eps (eps en mètres si en Lambert-93). Les zones denses deviennent des clusters ; les points trop isolés sont marqués comme bruit (label = -1). Contrairement à k-means, tu ne fixes pas le nombre de clusters : il sort du jeu de données et de tes deux paramètres (eps en mètres si tu es en Lambert-93, min_samples).
+  
+    - Connection :
+    
+        import os 
+        from dotenv import load_dotenv
+        from sqlalchemy import create_engine, text
+        import psycopg2
+        import pandas as pd
+
+        load_dotenv()
+
+        HOST = os.getenv("POSTGIS_HOST")
+        PORT = int(os.getenv("POSTGIS_PORT"))
+        USER = os.getenv("POSTGIS_USER")
+        PASSWORD = os.getenv("POSTGIS_PASSWORD")
+
+        engine = create_engine(
+            f"postgresql://{USER}:{PASSWORD}@{HOST}:{PORT}/incendies",
+            connect_args={"options": "-csearch_path=incendies_schema,public"}
+        )
+
+        # Test de connexion
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT version()"))
+                print("Connexion réussie !")
+                print("Version PostgreSQL :", result.scalar())
+
+                dbs = conn.execute(
+                    text("SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname")
+                ).fetchall()
+                print("Bases de données :", [db[0] for db in dbs])
+        except Exception as e:
+            print("Erreur de connexion :", e)
+  
+        # get connection
+        DATABASE_NAME="incendies"
+
+        def get_engine():
+            return create_engine(
+                f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE_NAME}",
+                connect_args={"options": "-csearch_path=incendie,public"},
+            )
+
+        engine = get_engine()
+  
+    - modification de la table localisation :
+    
+        # Ajout de l'extension Postgis
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+            conn.commit()
+
+        # Update de localisation avec les datatype geometry
+        ddl = [
+            """
+            ALTER TABLE localisation
+              ADD COLUMN IF NOT EXISTS geom geometry(Point, 4326)
+                GENERATED ALWAYS AS (
+                  ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
+                ) STORED
+            """,
+            """
+            ALTER TABLE localisation
+              ADD COLUMN IF NOT EXISTS geom_m geometry(Point, 2154)
+                GENERATED ALWAYS AS (
+                  ST_Transform(
+                    ST_SetSRID(ST_MakePoint(longitude, latitude), 4326),
+                    2154
+                  )
+                ) STORED
+            """,
+            """
+            CREATE INDEX IF NOT EXISTS localisation_geom_m_gix
+              ON localisation USING GIST (geom_m)
+            """,
+        ]
+
+        with engine.begin() as conn:
+            conn.execute(text("SET search_path TO incendie, public"))
+            for stmt in ddl:
+                conn.execute(text(stmt))
+
+
+
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+  o Récupération des localisations de communes
+
+      # TOTAL COMMUNES
+      with engine.connect() as conn:
+          df_communes = pd.read_sql(
+              text("""
+                  SELECT 
+                      r.id as region,
+                      l.id_localisation,
+                      ST_X(l.geom_m) AS x,
+                      ST_Y(l.geom_m) AS y
+                  FROM localisation l
+                  JOIN commune c ON l.id_localisation = c.localisation
+                  JOIN departement d ON c.departement = d.code
+                  JOIN region r ON c.region = r.id
+                  WHERE 
+                      d.code NOT IN ('971', '972', '973', '974', '976')
+                      AND l.geom_m IS NOT NULL
+                  GROUP BY r.id, l.id_localisation
+              """),conn)
+
+      if df_communes.empty:
+          raise ValueError("aucun incendie à clusteriser")
+
+      print(df_communes[["x", "y"]].describe())
+
+                        x             y
+      count  3.480100e+04  3.480100e+04
+      mean   6.855717e+05  6.653354e+06
+      std    2.015337e+05  2.475857e+05
+      min    1.022896e+05  6.051804e+06
+      25%    5.315064e+05  6.446423e+06
+      50%    6.792036e+05  6.700132e+06
+      75%    8.456766e+05  6.863153e+06
+      max    1.239135e+06  7.108481e+06
+
+
+      print(df_communes.duplicated(subset=["x", "y"]).sum())
+      print(df_communes.groupby(["x", "y"]).size().sort_values(ascending=False).head(10))
+
+      0
+      x              y           
+      102289.558940  6.847868e+06    1
+      787691.007615  6.528333e+06    1
+      788043.577508  6.749390e+06    1
+      787988.883258  6.841981e+06    1
+      787985.305831  6.661619e+06    1
+      787970.853426  6.976266e+06    1
+      787967.100062  6.924957e+06    1
+      787880.206067  6.568984e+06    1
+      787864.215524  6.941091e+06    1
+      787814.102945  6.719386e+06    1
+      dtype: int64
+
+
+  o Fonctions utiles
+
+      from sklearn.neighbors import NearestNeighbors
+      from sklearn.cluster import DBSCAN
+      import numpy as np
+      import matplotlib.pyplot as plt
+      from sklearn.metrics import silhouette_score, davies_bouldin_score
+      import time
+      import pandas as pd
+
+      # suggest_eps_range : détermine une suite de min_samples 
+      # Courbe k-distance 
+      def suggest_eps_range(X, k=4, n_points=30):
+          neighbors = NearestNeighbors(n_neighbors=k).fit(X)
+          distances, _ = neighbors.kneighbors(X)
+          k_distances = np.sort(distances[:, k - 1])
+
+          plt.figure(figsize=(6, 4))
+          plt.plot(k_distances)
+          plt.ylabel(f"Distance au {k}-ieme voisin")
+          plt.xlabel("Points tries par distance croissante")
+          plt.title("Courbe k-distance (cherchez le coude)")
+          plt.tight_layout()
+          plt.savefig("k_distance_curve.png", dpi=120)
+          plt.close()
+
+          low, high = np.percentile(k_distances, [70, 95])
+          low = max(low, 1.0)
+          if high <= low:
+              high = low + 1000.0
+          return np.linspace(low, high, n_points)
+
+
+      # dbscan_grid_search : utilise l'algorithme DBSCAN
+      #  pour déterminer les meilleures valeurs de eps et min_samples
+      #  en utilisant les métriques silhouette_score et davies_bouldin_score
+      def dbscan_grid_search(X, eps_values, min_samples_values, silhouette_sample_size=100000):
+          results = []
+
+          for min_samples in min_samples_values:
+              for eps in eps_values:
+                  labels = DBSCAN(eps=eps, min_samples=min_samples, algorithm="kd_tree").fit_predict(X)
+
+                  n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+                  noise_ratio = np.mean(labels == -1)
+
+                  mask = labels != -1
+                  if n_clusters >= 2 and mask.sum() > n_clusters:
+                      n_valid = mask.sum()
+                      sample = min(silhouette_sample_size, n_valid) if n_valid > silhouette_sample_size else None
+                      sil = silhouette_score(X[mask], labels[mask], sample_size=sample, random_state=42)
+                      dbi = davies_bouldin_score(X[mask], labels[mask])
+                  else:
+                      sil, dbi = np.nan, np.nan
+
+                  results.append({
+                      "eps": round(eps, 4),
+                      "min_samples": min_samples,
+                      "n_clusters": n_clusters,
+                      "noise_ratio": round(noise_ratio, 3),
+                      "silhouette": sil,
+                      "davies_bouldin": dbi,
+                  })
+
+          return pd.DataFrame(results)
+
+
+      # select_best_params : formate les résultats du grid search 
+      def select_best_params(df, max_noise_ratio=0.35, min_clusters=6):
+          candidates = df[
+              (df["noise_ratio"] <= max_noise_ratio)
+              & (df["n_clusters"] >= min_clusters)
+              & (df["silhouette"].notna())
+          ].copy()
+
+          if candidates.empty:
+              print("Aucune combinaison satisfaisante : "
+                    "elargissez max_noise_ratio ou la plage eps/min_samples.")
+              return None
+
+          # Score combine simple : on privilegie silhouette haut et DBI bas
+          candidates["combined_score"] = (
+              candidates["silhouette"] - candidates["davies_bouldin"]
+          )
+          candidates = candidates.sort_values("combined_score", ascending=False)
+          return candidates
+
+            with engine.connect() as conn:
+                df = pd.read_sql(text("""
+                    SELECT
+                        id_commune,
+                        ST_X(ST_Transform(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326), 2154)) AS x,
+                        ST_Y(ST_Transform(ST_SetSRID(ST_MakePoint(longitude, latitude), 4326), 2154)) AS y
+                    FROM cluster
+                """), conn)
+
+            if df.empty:
+                raise ValueError("aucun incendie à clusteriser")
+
+
+      # plot_clusters : scatter plot des clusters
+      def plot_clusters(X, labels, title="Clusters DBSCAN", figsize=(9, 9), point_size=15):
+          unique_labels = sorted(set(labels))
+          n_clusters = len(unique_labels) - (1 if -1 in unique_labels else 0)
+
+          fig, ax = plt.subplots(figsize=figsize)
+
+          cmap = plt.get_cmap("tab20", max(n_clusters, 1))
+          color_idx = 0
+
+          for lbl in unique_labels:
+              mask = labels == lbl
+              if lbl == -1:
+                  ax.scatter(
+                      X[mask, 0], X[mask, 1],
+                      c="lightgray", s=point_size, label=f"Bruit (n={mask.sum()})",
+                      alpha=0.6, edgecolors="none"
+                  )
+              else:
+                  ax.scatter(
+                      X[mask, 0], X[mask, 1],
+                      c=[cmap(color_idx)], s=point_size, label=f"Cluster {lbl} (n={mask.sum()})",
+                      alpha=0.85, edgecolors="none"
+                  )
+                  color_idx += 1
+
+          ax.set_xlabel("x (m)")
+          ax.set_ylabel("y (m)")
+          ax.set_title(f"{title} — {n_clusters} clusters")
+          ax.set_aspect("equal")
+          ax.legend(loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=8, markerscale=1.5)
+          plt.tight_layout()
+          plt.savefig("clusters_scatter.png", dpi=150, bbox_inches="tight")
+          plt.show()
+
+          return fig, ax
+
+
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+  o DBSCAN : Type complete
+
+      def find_best(df, X):
+          eps_values = suggest_eps_range(X, k=4, n_points=15)
+          min_samples_values = [4, 6, 8, 10, 12]
+          df_results = dbscan_grid_search(X, eps_values, min_samples_values)
+
+          best = select_best_params(df_results, max_noise_ratio=0.35)
+          if best is None:
+              return df_results, best, None, None
+
+          top = best.iloc[0]
+          best_eps = top["eps"]
+          best_min_samples = int(top["min_samples"])
+
+          # print(best.head(10).to_string(index=False))
+          return df_results, best, best_eps, best_min_samples
+
+
+    - Visualisation
+
+        resultats = {}
+
+        region = 6
+
+        df_region = df_communes.groupby("region").get_group(region).copy()
+        X = df_region[["x", "y"]].values
+
+        df_results, best, best_eps, best_min_samples = find_best(df_region,X)
+        labels = DBSCAN(eps=best_eps, min_samples=best_min_samples, algorithm="kd_tree").fit_predict(X)
+
+        plot_clusters(X, labels, title="Région 7 — proximité communes")
+
+              eps  min_samples  n_clusters  noise_ratio  silhouette  davies_bouldin  combined_score
+        4432.9963            8          12        0.301    0.138229        0.691290       -0.553061
+        4727.6174            8          12        0.232    0.095347        0.663814       -0.568467
+        4531.2034            8          11        0.282    0.057329        0.650841       -0.593512
+        4825.8245            8          14        0.204    0.069868        0.677722       -0.607854
+        4138.3752            6          15        0.189    0.093832        0.704484       -0.610652
+        4629.4104            8          14        0.249    0.061187        0.680627       -0.619440
+        4040.1682            6          18        0.217    0.078926        0.726425       -0.647499
+        3843.7541            6          22        0.264   -0.027118        0.668700       -0.695818
+        4334.7893            8          13        0.324   -0.052665        0.644875       -0.697540
+        4334.7893            6          13        0.133   -0.036883        0.668705       -0.705588
+
+          cf : cluster-6.png ...
+
+
+  o Scan et enregistrement en base :
+    
+        # Update de cluster avec un champ cluster varchars
+        ddl = [
+            """
+            ALTER TABLE cluster
+            ALTER COLUMN cluster_id TYPE VARCHAR(50);
+            """
+        ]
+
+        with engine.begin() as conn:
+            conn.execute(text("SET search_path TO incendies, public"))
+            for stmt in ddl:
+                conn.execute(text(stmt))
+                conn.commit()
+                
+        # Update de localisation avec les datatype geometry
+        ddl = [
+            """
+            CREATE TABLE experiment (
+                id SERIAL PRIMARY KEY,
+                date_experiment TIMESTAMP NOT NULL,
+                type_cluster SMALLINT NOT NULL,
+                region SMALLINT NOT NULL,
+                eps FLOAT4,
+                min_samples INT4,
+                CONSTRAINT uq_experiment UNIQUE (date_experiment, type_cluster, region),
+                CONSTRAINT fk_experiment_type_cluster FOREIGN KEY (type_cluster) REFERENCES type_cluster (id),
+                CONSTRAINT fk_experiment_region FOREIGN KEY (region) REFERENCES region (id)
+            );
+            """
+        ]
+
+        with engine.begin() as conn:
+            conn.execute(text("SET search_path TO incendies, public"))
+            for stmt in ddl:
+                conn.execute(text(stmt))
+                conn.commit()
+
+    - Fonctions d'update 
+      
+        from datetime import date, datetime, timezone
+
+        def db_scan(df, region, eps, min_samples):
+
+            df_region = df.groupby("region").get_group(region).copy()
+            X = df_region[["x", "y"]].values
+            
+            labels = DBSCAN(eps=eps, min_samples=min_samples)
+
+            # fit_predict(X) fait deux choses d’un coup : il apprend les clusters sur X, 
+            #  puis renvoie un tableau d’entiers, une valeur par ligne, dans le même ordre que df.
+            #  Dès qu’il trouve un nouveau groupe dense, il lui donne le prochain entier : 0, puis 1, puis 2
+            #  Il peut renvoyer -1 : point trop isolé
+            clusters_locaux = labels.fit_predict(X)
+            
+            # ajustement des clusters locaux (-1 devient 0, les autres +1)
+            df_region["cluster_local"] = np.where(
+                clusters_locaux == -1, 0, clusters_locaux + 1
+            )
+
+            # Création du cluster global (ex: "17_1", "17_2")
+            df_region["cluster_id"] = (
+                df_region["region"].astype(str) + "_" + df_region["cluster_local"].astype(str)
+            )
+            
+            return df_region
+
+
+        def update_cluster(df, date_experiment, type_cluster):
+
+            df_copy = df.copy()
+            
+            # date experiment
+            df_copy["date_experiment"] = date_experiment
+            # type_cluster
+            df_copy["type_cluster"] = type_cluster
+
+            # colonnes de la table cluster
+            df_insert = df_copy[["id_localisation", "date_experiment", "cluster_id", "type_cluster"]]
+
+            sql = text("""
+                INSERT INTO cluster (
+                    id_localisation, date_experiment, cluster_id, type_cluster
+                )
+                VALUES (
+                    :id_localisation, :date_experiment, :cluster_id, :type_cluster
+                )
+            """)
+
+            with engine.begin() as conn:
+                conn.execute(sql, df_insert.to_dict(orient="records"))
+
+        def update_experiment(date_experiment,type_cluster,region,eps,min_samples):
+            sql = text("""
+                INSERT INTO experiment (
+                    date_experiment, type_cluster, region, eps, min_samples
+                )
+                VALUES (
+                    :date_experiment, :type_cluster, :region, :eps, :min_samples
+                )
+            """)
+
+            with engine.begin() as conn:
+                conn.execute(sql, {
+                    "date_experiment": date_experiment,
+                    "type_cluster": type_cluster,
+                    "region": region,
+                    "eps": eps,
+                    "min_samples": min_samples,
+                })
+
+    - Update 
+            
+        from datetime import date, datetime, timezone
+
+        # date experiment
+        date_experiment = datetime.now()
+
+        # type_cluster
+        with engine.connect() as conn:
+            type_cluster = conn.execute(text("""
+                SELECT id
+                FROM type_cluster
+                WHERE nom = 'complete'
+            """)).scalar_one()
+
+        for region, df_region in df_communes.groupby("region"):
+
+            X = df_region[["x", "y"]].values
+
+            df_results, best, best_eps, best_min_samples = find_best(df_region,X)
+
+            df_scan = db_scan(df_communes, min_samples=best_min_samples, eps=best_eps, region=region)
+            update_cluster(df_scan, date_experiment, type_cluster)
+            update_experiment(date_experiment=date_experiment,type_cluster=type_cluster,region=region,eps=float(best_eps),min_samples=int(best_min_samples))
+
+
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+  o DBSCAN : Type with fire
+
+      # TOTAL COMMUNES
+      with engine.connect() as conn:
+          df_communes = pd.read_sql(
+              text("""
+                  SELECT 
+                      r.id as region,
+                      l.id_localisation,
+                      ST_X(l.geom_m) AS x,
+                      ST_Y(l.geom_m) AS y,
+                      COUNT(i.code_insee) AS nb_incendies,
+                      SUM(i.surface_parcourue) AS surface_totale
+                  FROM localisation l
+                  JOIN incendie i ON l.id_localisation = i.localisation
+                  JOIN commune c ON i.code_insee = c.code_insee
+                  JOIN departement d ON c.departement = d.code
+                  JOIN region r ON c.region = r.id
+                  WHERE 
+                      d.code NOT IN ('971', '972', '973', '974', '976')
+                      AND l.geom_m IS NOT NULL
+                  GROUP BY r.id, l.id_localisation
+              """),conn)
+
+      if df_communes.empty:
+          raise ValueError("aucun incendie à clusteriser")
+
+      print(df_communes[["x", "y"]].describe())
+
+                        x             y
+      count  9.416000e+03  9.416000e+03
+      mean   6.901559e+05  6.472159e+06
+      std    2.205653e+05  2.099470e+05
+      min    1.289136e+05  6.051804e+06
+      25%    5.159845e+05  6.313527e+06
+      50%    6.721078e+05  6.426363e+06
+      75%    8.563539e+05  6.633815e+06
+      max    1.239135e+06  7.070758e+06
+
+      print(df_communes.duplicated(subset=["x", "y"]).sum())
+      print(df_communes.groupby(["x", "y"]).size().sort_values(ascending=False).head(10))
+
+      0
+      x              y           
+      128913.612892  6.842844e+06    1
+      801364.021520  6.303807e+06    1
+      799783.694194  6.367898e+06    1
+      799844.923491  6.467765e+06    1
+      799876.829123  6.589606e+06    1
+      799945.261685  6.461546e+06    1
+      799964.281759  6.376567e+06    1
+      799967.021838  6.356346e+06    1
+      799997.233786  6.389455e+06    1
+      800043.428728  6.401453e+06    1
+      dtype: int64
+
+    - Génération et Enregistrement des clusters de feux
+
+        from datetime import date, datetime, timezone
+
+        # date experiment
+        date_experiment = datetime.now()
+
+        # type_cluster
+        with engine.connect() as conn:
+            type_cluster = conn.execute(text("""
+                SELECT id
+                FROM type_cluster
+                WHERE nom = 'with fire'
+            """)).scalar_one()
+
+        for region, df_region in df_communes.groupby("region"):
+
+            if(region in (10,10)):
+                X = df_region[["x", "y"]].values
+
+                df_results, best, best_eps, best_min_samples = find_best(df_region,X)
+
+                if best is not None:
+                    df_scan = db_scan(df_communes, min_samples=best_min_samples, eps=best_eps, region=region)
+                    update_cluster(df_scan, date_experiment, type_cluster)
+                    update_experiment(date_experiment=date_experiment,type_cluster=type_cluster,region=region,eps=float(best_eps),min_samples=int(best_min_samples))
+                else:
+                    print(f"Problème avec la region ; {region}")
+
+        Aucune combinaison satisfaisante : elargissez max_noise_ratio ou la plage eps/min_samples.
+        Problème avec la region ; 10
+
+    - Cas particulier : region 10 - n_points=60, min_samples_values = [2, 3, 4, 5, 6]
+
+        region = 10
+
+        df_region = df_communes.groupby("region").get_group(region).copy()
+        X = df_region[["x", "y"]].values
+
+        eps_values = suggest_eps_range(X, k=4, n_points=60)
+        min_samples_values = [2, 3, 4, 5, 6]
+        df_results = dbscan_grid_search(X, eps_values, min_samples_values)
+
+        best = select_best_params(df_results, max_noise_ratio=0.35)
+        if best is not None:
+            top = best.iloc[0]
+            best_eps = top["eps"]
+            best_min_samples = int(top["min_samples"])
+            print(best.head(10).to_string(index=False))
+
+            date_experiment = datetime.strptime("2026-09-15 15:48:42.912", "%Y-%m-%d %H:%M:%S.%f")
+
+            df_scan = db_scan(df_communes, min_samples=3, eps=23200, region=region)
+            update_cluster(df_scan, date_experiment, type_cluster)
+            update_experiment(date_experiment=date_experiment,type_cluster=type_cluster,region=region,eps=float(23200),min_samples=int(3))
+
+               eps  min_samples  n_clusters  noise_ratio  silhouette  davies_bouldin  combined_score
+        23451.4121            3           6        0.092    0.473561        0.452202        0.021359
+        23018.4210            3           6        0.092    0.473561        0.452202        0.021359
+        24317.3942            2           6        0.066    0.436258        0.512648       -0.076389
+        24750.3853            2           6        0.066    0.436258        0.512648       -0.076389
+        25616.3674            3           6        0.066    0.436258        0.512648       -0.076389
+        25183.3763            3           6        0.066    0.436258        0.512648       -0.076389
+        24750.3853            3           6        0.066    0.436258        0.512648       -0.076389
+        24317.3942            3           6        0.066    0.436258        0.512648       -0.076389
+        23884.4031            3           6        0.066    0.436258        0.512648       -0.076389
+        26049.3585            2           6        0.066    0.436258        0.512648       -0.076389
+
+
