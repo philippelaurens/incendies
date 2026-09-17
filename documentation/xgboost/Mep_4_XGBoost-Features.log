@@ -1,0 +1,721 @@
+
+  o Création de la table commune_jour
+  
+      ddl = [
+          """
+          CREATE TABLE commune_jour AS
+          SELECT 
+              c.id_commune,
+              d.jour::date AS date_jour,
+              FALSE AS has_fire
+          FROM 
+              commune c
+          CROSS JOIN 
+              generate_series(
+                  '2006-01-01'::date, 
+                  '2025-12-31'::date, 
+                  '1 day'::interval
+              ) AS d(jour);
+          """
+      ]
+
+      with engine.begin() as conn:
+          conn.execute(text("SET search_path TO incendies, public"))
+          for stmt in ddl:
+              conn.execute(text(stmt))
+              conn.commit()
+
+
+      ddl = [
+          """
+          ALTER TABLE commune_jour
+          ADD CONSTRAINT pk_commune_jour PRIMARY KEY (id_commune, date_jour);
+          """
+      ]
+
+      with engine.begin() as conn:
+          conn.execute(text("SET search_path TO incendies, public"))
+          for stmt in ddl:
+              conn.execute(text(stmt))
+              conn.commit()
+
+
+      ddl = [
+          """
+          ALTER TABLE commune_jour 
+          ALTER COLUMN has_fire TYPE SMALLINT 
+          USING (has_fire::INT);
+          """
+      ]
+
+      with engine.begin() as conn:
+          conn.execute(text("SET search_path TO incendies, public"))
+          for stmt in ddl:
+              conn.execute(text(stmt))
+              conn.commit()
+
+
+      sql = text("""
+          UPDATE commune_jour cj
+          SET has_fire = 1
+          FROM incendie i
+          JOIN commune c ON c.code_insee = i.code_insee
+          WHERE cj.id_commune = c.id_commune 
+            AND cj.date_jour = i.date_premiere_alerte::date;
+      """)
+
+      with engine.begin() as conn:
+          conn.execute(sql)
+
+  o Ajout 
+  
+      ddl = [
+          """
+          ALTER TABLE commune_jour
+            ADD COLUMN IF NOT EXISTS nb_incendie_30j INT
+          """,
+          """
+          ALTER TABLE commune_jour
+            ADD COLUMN IF NOT EXISTS nb_incendie_90j INT
+          """,
+          """
+          ALTER TABLE commune_jour
+            ADD COLUMN IF NOT EXISTS nb_incendie_365j INT
+          """,
+          """
+          ALTER TABLE commune_jour
+            ADD COLUMN IF NOT EXISTS surface_totale_5a INT
+          """,
+          """
+          ALTER TABLE commune_jour
+            ADD COLUMN IF NOT EXISTS buffer_10km INT
+          """,
+          """
+          ALTER TABLE commune_jour
+            ADD COLUMN IF NOT EXISTS buffer_20km INT
+          """,
+          """
+          ALTER TABLE commune_jour
+            ADD COLUMN IF NOT EXISTS buffer_50km INT
+          """,
+      ]
+
+      with engine.connect() as conn:
+          conn.execute(text("SET search_path TO incendies, public"))
+          for stmt in ddl:
+              conn.execute(text(stmt))
+              conn.commit()
+
+    - Mise à jour
+
+      ¤ nb_incendies_30j, nb_incendies_90j, nb_incendies_365j
+      
+          sql = text("""
+              INSERT INTO commune_jour (
+                  id_commune, date_jour,
+                  nb_incendies_30j, nb_incendies_90j, nb_incendies_365j
+              )
+              SELECT
+                  c.id_commune,
+                  :date_jour,
+                  COUNT(*) FILTER (
+                      WHERE i.date_premiere_alerte::date < :date_jour + INTERVAL '30 days'
+                  ),
+                  COUNT(*) FILTER (
+                      WHERE i.date_premiere_alerte::date < :date_jour  + INTERVAL '90 days'
+                  ),
+                  COUNT(*)
+              FROM commune c
+              JOIN incendie i ON i.code_insee = c.code_insee
+                  AND i.date_premiere_alerte::date >= :date_jour 
+                  AND i.date_premiere_alerte::date < :date_jour  + INTERVAL '365 days'
+              GROUP BY c.id_commune
+              -- UPSERT
+              -- Si une ligne existe déjà pour cette commune à cette date, 
+              -- on remplace ses colonnes nb_incendies_30, nb_incendies_90, nb_incendies_365 
+              -- par les nouvelles valeurs calculées, plutôt que de générer une erreur ou de créer un doublon.
+              ON CONFLICT (id_commune, date_jour) DO UPDATE
+              SET nb_incendies_30j  = excluded.nb_incendies_30j,
+                  nb_incendies_90j  = excluded.nb_incendies_90j,
+                  nb_incendies_365j = excluded.nb_incendies_365j;
+          """)
+
+          with engine.connect() as conn:
+              for jour in dates["date_jour"]:
+                  conn.execute(sql, {"date_jour": jour})
+                  conn.commit()
+
+      ¤ surface_totale_5a
+
+          sql = text("""
+              INSERT INTO commune_jour (
+                  id_commune, date_jour,
+                  surface_totale_5a
+              )
+              SELECT
+                  c.id_commune,
+                  :date_jour,
+                  SUM(Surface_totale_5a)
+              FROM commune c
+              JOIN incendie i ON i.code_insee = c.code_insee
+                  AND i.date_premiere_alerte::date >= :date_jour 
+                  AND i.date_premiere_alerte::date < :date_jour + INTERVAL '1825 days'
+              GROUP BY c.id_commune
+              ON CONFLICT (id_commune, date_jour) DO UPDATE
+              SET Surface_totale_5a  = excluded.Surface_totale_5a;
+          """)
+
+          with engine.connect() as conn:
+              for jour in dates["date_jour"]:
+                  conn.execute(sql, {"date_jour": jour})
+                  conn.commit()
+
+      ¤ buffer_10km
+
+         - Exemple pour la commune dont l'id est 4352
+
+            WITH ref AS (
+                SELECT 
+                    c.id_commune,
+                    ST_Transform(l.geom, 2154) AS geom_m
+                FROM commune c
+                JOIN localisation l ON l.id_localisation = c.localisation
+                WHERE c.id_commune = 4352
+            ),
+            WITH communes_avec_incendies AS
+            (
+                SELECT
+                    ref.id_commune AS ref_commune,
+                    c.id_commune AS search_commune,
+                    COUNT(i.id_incendie) AS nb_incendies
+                FROM commune c
+                JOIN localisation l ON l.id_localisation = c.localisation
+                CROSS JOIN ref
+                LEFT JOIN incendie i ON i.code_insee = c.code_insee
+                WHERE ST_DWithin(
+                        ST_Transform(l.geom, 2154),
+                        ref.geom_m,
+                        10000
+                      )
+                GROUP BY ref.id_commune, c.id_commune
+            )
+            SELECT
+                ref_commune,
+                SUM(nb_incendies) AS total_incendies
+            FROM communes_avec_incendies
+            GROUP BY ref_commune;
+
+         - candidates
+
+              WITH ref AS (
+                  SELECT 
+                      c.id_commune,
+                      ST_Transform(l.geom, 2154) AS geom_m
+                  FROM commune c
+                  JOIN localisation l ON l.id_localisation = c.localisation
+              ),
+              communes_avec_incendies AS
+              (
+                  SELECT
+                      ref.id_commune AS ref_commune,
+                      c.id_commune AS search_commune,
+                      COUNT(i.id_incendie) AS nb_incendies
+                  FROM commune c
+                  JOIN localisation l ON l.id_localisation = c.localisation
+                  CROSS JOIN ref
+                  LEFT JOIN incendie i ON i.code_insee = c.code_insee
+                  WHERE ST_DWithin(
+                          ST_Transform(l.geom, 2154),
+                          ref.geom_m,
+                          10000
+                        )
+                  GROUP BY ref.id_commune, c.id_commune
+              )
+              SELECT
+                  ref_commune,
+                  SUM(nb_incendies) AS total_incendies
+              FROM communes_avec_incendies
+              GROUP BY ref_commune;
+
+            ou
+
+          WITH paires_communes AS (
+              SELECT 
+                  c1.id_commune AS ref_commune,
+                  c2.code_insee AS search_code_insee
+              FROM commune c1
+              JOIN localisation l1 ON l1.id_localisation = c1.localisation
+              JOIN localisation l2 ON ST_DWithin(
+                  ST_Transform(l1.geom, 2154),
+                  ST_Transform(l2.geom, 2154),
+                  10000
+              )
+              JOIN commune c2 ON c2.localisation = l2.id_localisation
+          )
+          SELECT 
+              p.ref_commune,
+              COUNT(i.id_incendie) AS total_incendies
+          FROM paires_communes p
+          LEFT JOIN incendie i ON i.code_insee = p.search_code_insee
+          GROUP BY p.ref_commune;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- 1. Création de la vue matérialisée
+CREATE MATERIALIZED VIEW mv_communes_incendies_10km AS
+WITH paires_communes AS (
+    SELECT 
+        c1.id_commune AS ref_commune,
+        c2.code_insee AS search_code_insee
+    FROM commune c1
+    JOIN localisation l1 ON l1.id_localisation = c1.localisation
+    JOIN localisation l2 ON ST_DWithin(
+        ST_Transform(l1.geom, 2154),
+        ST_Transform(l2.geom, 2154),
+        10000
+    )
+    JOIN commune c2 ON c2.localisation = l2.id_localisation
+)
+SELECT 
+    p.ref_commune,
+    COUNT(i.id_incendie) AS total_incendies
+FROM paires_communes p
+LEFT JOIN incendie i ON i.code_insee = p.search_code_insee
+GROUP BY p.ref_commune;
+
+-- 2. Création d'un index unique (nécessaire pour pouvoir la rafraîchir sans bloquer la table)
+CREATE UNIQUE INDEX idx_mv_communes_incendies_ref ON mv_communes_incendies_10km (ref_commune);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+WITH ref AS (
+    SELECT 
+        c.id_commune,
+        ST_Transform(l.geom, 2154) AS geom_m
+    FROM commune c
+    JOIN localisation l ON l.id_localisation = c.localisation
+    WHERE c.id_commune = 4352
+),
+WITH commmunes_avec_incendies AS
+(
+    SELECT
+        ref.id_commune AS ref_commune,
+        c.id_commune AS search_commune,
+        COUNT(i.id_incendie) AS nb_incendies
+    FROM commune c
+    JOIN localisation l ON l.id_localisation = c.localisation
+    CROSS JOIN ref
+    LEFT JOIN incendie i ON i.code_insee = c.code_insee
+    WHERE ST_DWithin(
+            ST_Transform(l.geom, 2154),
+            ref.geom_m,
+            10000
+          )
+    GROUP BY ref.id_commune, c.id_commune
+)
+SELECT
+    ref_commune,
+    SUM(nb_incendies) AS total_incendies
+FROM communes_avec_incendies
+GROUP BY ref_commune;
+
+
+
+
+
+
+
+
+
+
+Données CSV                                                                  :  X
+Données en base MySQL et création des tables                                 :  X 
+Données en base Postgis et modification des tables                           :  X
+
+Création de cluster spatiaux                                                 :  X
+    Ajout de colonnes                                                        :  à finaliser
+    Algorithme de calcul de score de risque                                  :  à faire   
+
+Génération d'un dataset et entrainement d'un modèle avec XGBoost             :  à faire
+
+création de l'application streamlit                                          :  à faire
+utilisation du modèle via l'application                                      :  à faire
+
+Présentation                                                                 :  à finaliser
+
+
+
+
+
+
+        
+        
+
+
+
+
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+          notebook.google.com/notebook/54a91608-e6bf-4268-ab2f-7b8b7e82bcc2
+
+
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+
+
+  SCORE HISTO : nb_incident 30j / 90j / 365 j - Surf5ans - 
+  -----------
+    
+    Shisto (c,t) = w1 x ln(1 + nb_incident_30j(c,t)) + w2 x ln(1 + nb_incident_9j0(c,t)) + w3 x ln(1 + nb_incident_365j(c,t))
+                 + w4 x ln(1 + Surf5ans(c,t))
+                 + w5 x y(c,t-365) (Feux 0/1 les 365 jours précédents) 
+
+
+  SCORE TOPO : buffer 10 km + buffer 20 km + buffer 50 km
+  ----------
+
+    nombre total d'incendies/ville survenus dans un rayon de 10 km autour du centroïde d'une commune.
+
+
+    Stopo(c,t) = w1 x ln(1 + buffer_10km(c,t)) + w2 x ln(1 + buffer_20km(c,t)) + w3 x ln(1 + buffer_50km(c,t))
+               +  w4 x SIGMA(j appartement à l'ensemble des communes dans mon rayon de 50 km) de surf(j) / d²(c,j) + €       
+    +
+    normalisation
+
+
+
+
+
+
+CREATE TABLE incendies.localisation (
+	id_localisation serial4 NOT NULL,
+	longitude numeric(9, 6) NULL,
+	latitude numeric(9, 6) NULL,
+	geom incendies.geometry(point, 4326) GENERATED ALWAYS AS (incendies.st_setsrid(incendies.st_makepoint(longitude::double precision, latitude::double precision), 4326)) STORED NULL,
+	geom_m incendies.geometry(point, 2154) GENERATED ALWAYS AS (incendies.st_transform(incendies.st_setsrid(incendies.st_makepoint(longitude::double precision, latitude::double precision), 4326), 2154)) STORED NULL,
+	CONSTRAINT localisation_pkey PRIMARY KEY (id_localisation)
+);
+CREATE INDEX idx_localisation_latitude ON incendies.localisation USING btree (latitude);
+
+
+
+
+SELECT
+    c.id_commune,
+    c.nom_standard,
+    COUNT(i.id_incendie) AS nb_incendies_10km
+FROM commune c
+LEFT JOIN incendie i
+    JOIN localisation l ON l.id_localisation = i.localisation
+  ON ST_DWithin(
+        l.geom_m,
+        ST_Transform(c.geom, 2154),
+        10000
+     )
+GROUP BY c.id_commune, c.nom_standard;
+
+
+
+
+WITH ref AS (
+    SELECT ST_Transform(l.geom, 2154) AS geom_m
+    FROM commune c
+    JOIN localisation l ON l.id_localisation = c.localisation
+    WHERE c.id_commune = 4352
+)
+SELECT
+    c.id_commune,
+    COUNT(i.id_incendie) AS nb_incendies
+FROM commune c
+JOIN localisation l ON l.id_localisation = c.localisation
+CROSS JOIN ref
+LEFT JOIN incendie i ON i.code_insee = c.code_insee
+WHERE ST_DWithin(
+        ST_Transform(l.geom, 2154),
+        ref.geom_m,
+        100000  -- 100 km en mètres
+      )
+GROUP BY c.id_commune
+ORDER BY nb_incendies DESC;
+
+
+
+SELECT ST_Distance(
+    ST_Transform(ST_SetSRID(ST_MakePoint(lon1, lat1), 4326), 2154),
+    ST_Transform(ST_SetSRID(ST_MakePoint(lon2, lat2), 4326), 2154)
+) AS distance_metres;
+
+
+
+
+
+SELECT ST_Transform(l.geom, 2154) AS geom_m
+FROM commune c,
+JOIN localisation l on l.id_localisation = c.localisation
+WHERE id_commune = 4352
+
+
+
+
+
+
+  SCORE CLUSTER : 
+
+    Donner à HDBSCAN un ensemble de features, mais après avoir appliqué une transformation (Manifold) --> densMAP (pas PCA, ni UMAP Standard)
+
+    Somme pour toutes les communes du buffer (de 10 km) de la surface qui a brulé / distance(c, ci) pour i appartement au buffer : le tout à normaliser
+
+
+
+
+
+
+
+‌
+from tqdm.auto import tqdm
+dates = pd.read_sql(
+    "SELECT DISTINCT date_jour FROM commune_jour ORDER BY date_jour",
+    engine,
+)
+sql = text("""
+INSERT INTO commune_jour (
+    id_commune, date_jour,
+    nb_incendies_30, nb_incendies_90, nb_incendies_365
+)
+SELECT
+    c.id_commune,
+    :date_jour,
+    COUNT(*) FILTER (
+        WHERE i.date_premiere_alerte < :date_jour::timestamptz + INTERVAL '30 days'
+    ),
+    COUNT(*) FILTER (
+        WHERE i.date_premiere_alerte < :date_jour::timestamptz + INTERVAL '90 days'
+    ),
+    COUNT(*)
+FROM communes c
+JOIN incendie i
+  ON i.code_insee = c.code_insee
+ AND i.date_premiere_alerte >= :date_jour::timestamptz
+ AND i.date_premiere_alerte <  :date_jour::timestamptz + INTERVAL '365 days'
+GROUP BY c.id_commune
+ON CONFLICT (id_commune, date_jour) DO UPDATE
+SET nb_incendies_30  = EXCLUDED.nb_incendies_30,
+    nb_incendies_90  = EXCLUDED.nb_incendies_90,
+    nb_incendies_365 = EXCLUDED.nb_incendies_365;
+""")
+with engine.begin() as conn:
+    for jour in dates["date_jour"]:
+        conn.execute(sql, {"date_jour": jour})
+Ou
+with engine.begin() as conn:
+    for jour in tqdm(dates["date_jour"]):
+        conn.execute(sql, {"date_jour": jour})
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+
+
+
+Une fois le dataset passé à XGBoost, voici la suite logique du pipeline.
+
+1. Split des données — attention à la fuite temporelle
+
+Pour du risque d'incendie, un split aléatoire classique est risqué : des observations très proches en temps/espace peuvent se retrouver à la fois en train et en test, ce qui gonfle artificiellement les performances. Mieux vaut un split temporel (entraîner sur des années passées, tester sur une année plus récente) et/ou spatial (zones géographiques disjointes), selon ce que le modèle doit généraliser.
+
+
+2. Premier entraînement de référence (baseline)
+
+Un modèle simple avec les hyperparamètres par défaut, toutes features incluses. Ça te donne un point de comparaison pour tout ce qui suivra — inutile d'optimiser avant d'avoir cette baseline.
+
+
+3. Évaluation — mais avec les bonnes métriques
+
+Comme les incendies sont rares (classes déséquilibrées), l'accuracy est trompeuse. Regarde plutôt :
+
+AUC-ROC et surtout AUC-PR (Precision-Recall), plus informative sur données déséquilibrées
+Log loss ou Brier score, qui mesurent la qualité de la probabilité elle-même (pas juste le classement)
+Une courbe de calibration pour vérifier que "proba 0.7" correspond bien à ~70% de fréquence observée
+
+
+4. Validation croisée adaptée
+
+Une k-fold classique n'est pas idéale ici pour les mêmes raisons de fuite. Une validation croisée temporelle (type walk-forward) ou groupée par zone géographique est plus honnête.
+
+
+5. Test avec/sans features (ton objectif)
+
+Deux approches complémentaires :
+
+Importance de features (feature_importances_, gain, ou mieux : SHAP values) pour voir ce que le modèle utilise réellement
+Ablation study : tu entraînes plusieurs variantes du modèle (toutes features, sans feature X, sans groupe de features Y...) et tu compares les métriques. C'est le test le plus fiable pour juger si une feature apporte vraiment quelque chose, l'importance interne pouvant parfois être trompeuse (colinéarité, biais de sélection des arbres).
+
+
+6. Tuning des hyperparamètres
+
+Une fois le set de features stabilisé : max_depth, learning_rate, n_estimators, subsample, colsample_bytree, scale_pos_weight... via une recherche (Optuna, grid/random search) avec la validation croisée adaptée du point 4.
+
+
+7. Calibration finale si nécessaire
+
+Si les probabilités brutes ne sont pas bien calibrées (courbe du point 3), on applique Platt scaling ou isotonic regression sur un jeu de calibration séparé.
+
+
+8. Interprétation et seuillage métier
+
+SHAP pour comprendre les décisions du modèle (utile aussi pour convaincre des utilisateurs métier). Puis définir le seuil d'alerte selon le coût réel des faux positifs (fausses alertes) vs faux négatifs (incendie manqué) — souvent asymétrique dans ce genre de contexte.
+
+
+
+
+
+
+
+
+
+import lightgbm as lgb
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+
+model_lgb = lgb.LGBMClassifier(
+    n_estimators=500,
+    learning_rate=0.05,
+    max_depth=-1,
+    num_leaves=31,
+    objective='binary',
+    random_state=42
+)
+
+model_lgb.fit(
+    X_train, y_train,
+    eval_set=[(X_test, y_test)],
+    eval_metric='auc',
+    callbacks=[lgb.early_stopping(50)]
+)
+
+y_proba = model_lgb.predict_proba(X_test)[:, 1]
+print("AUC:", roc_auc_score(y_test, y_proba))
+
+
+
+
+
+
+id_localisation | altitude | vegetation_ndvi | vegetation_type_foret | vegetation_type_urbain | vegetation_type_agricole
+
+
+
+
+
+id_localisation | altitude | vegetation_ndvi | nb_incendies | surface_totale | surface_moy_par_incendie | cause_dominante_foudre | cause_dominante_malveillance | cause_dominante_agricole
+
+nb_incendies, surface_totale : passer en log1p() avant standardisation (asymétrie forte).
+surface_moy_par_incendie : idem, log1p().
+altitude, vegetation_ndvi : standardisation classique.
+cause_dominante_* : one-hot.
+
+Paramètres DBSCAN : ici le nombre de dimensions est plus élevé (facilement 7-10 colonnes selon le nombre de catégories de cause/végétation) — DBSCAN devient moins fiable en haute dimension (la notion de "densité" perd du sens, effet de la malédiction de la dimensionnalité). Si tu as beaucoup de colonnes one-hot, envisage soit de réduire (PCA avant DBSCAN, ou ne garder que les 3-4 causes les plus fréquentes + "autre"), soit d'augmenter min_samples sensiblement plus que la règle 2×dimensions pour compenser la dispersion en haute dimension.
+
+
+
+
+
+Ton intuition est bonne, mais il y a une distinction importante à faire : les ID de clusters (les labels DBSCAN eux-mêmes, ex. "cluster 3") ne sont pas des features directement exploitables par XGBoost — ce sont des identifiants arbitraires, pas des valeurs ordonnées ou continues. Ce qui compte, c'est ce que tu dérives de l'appartenance à un cluster ou de la proximité.
+
+
+Feature basée sur ton clustering de proximité existant
+------------------------------------------------------
+
+Ici, on réutilise le clustering que tu as déjà en base (cluster_proximite), en calculant un score de risque par cluster, qu'on assigne ensuite à chaque commune du cluster :
+
+# df a une colonne cluster_proximite et une colonne a_eu_feu (0/1), nb_incendies, surface_totale
+
+cluster_risk = df.groupby("cluster_proximite").agg(
+    nb_communes_cluster=("id_localisation", "count"),
+    nb_communes_feu_cluster=("a_eu_feu", "sum"),
+    nb_incendies_cluster=("nb_incendies", "sum"),
+).reset_index()
+
+cluster_risk["ratio_communes_feu_cluster"] = (
+    cluster_risk["nb_communes_feu_cluster"] / cluster_risk["nb_communes_cluster"]
+)
+
+df = df.merge(cluster_risk, on="cluster_proximite", how="left")
+
+Une commune sans feu, mais dans un cluster où 40% des communes ont brûlé, a alors une feature ratio_communes_feu_cluster=0.4 — c'est exactement l'idée que tu avais depuis le début, transformée en variable numérique utilisable.
+
+
+  Le problème de fuite à corriger d'abord
+
+  Dans mon exemple précédent, une commune qui a eu un feu contribue à son propre score de cluster (ratio_communes_feu_cluster). Si tu utilises ensuite ce score comme feature pour prédire si cette même commune aura un feu, tu introduis une fuite : le modèle voit indirectement la réponse.
+
+  La correction standard est le leave-one-out : pour chaque commune, calculer le ratio du cluster en s'excluant elle-même :
+
+
+
+
+
+
+
+
+
+
