@@ -1,10 +1,10 @@
 import pandas as pd
 
 from sqlalchemy import create_engine, text
-from src.config import DATABASE_URL
+from src.config import URI
 
 # Moteur SQLAlchemy unique réutilisable
-engine = create_engine(DATABASE_URL)
+engine = create_engine(URI)
 
 def get_engine():
     """Retourne l'engine SQLAlchemy."""

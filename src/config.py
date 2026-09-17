@@ -21,6 +21,7 @@ FIGURES_DIR = ROOT_DIR / "figures"
 
 
 #  ================== split train/val/test ===================================
+SPLIT_TRAIN_START = pd.Timestamp('2006-01-01')
 SPLIT_TRAIN_END  = pd.Timestamp('2022-12-31')
 SPLIT_VAL_START  = pd.Timestamp('2023-01-01')
 SPLIT_VAL_YEAR = 2023
@@ -40,7 +41,7 @@ PORT = int(os.getenv("POSTGRES_PORT"))
 USER = os.getenv("POSTGRES_USER")
 PASSWORD = os.getenv("POSTGRES_PASSWORD")
 NAME = os.getenv("POSTGRES_DB", "incendies")
-DB_URL = f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}"
+URI = f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{NAME}"
 
 
 
