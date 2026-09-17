@@ -1,5 +1,5 @@
 
-SET search_path TO incendies, public
+SET search_path TO incendies, public;
 
 
 CREATE SEQUENCE incendies.commune_id_commune_seq
