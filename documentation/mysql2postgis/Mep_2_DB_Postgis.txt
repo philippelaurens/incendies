@@ -6,7 +6,7 @@ Installation sur une instance EC2 (AWS) ou sur n'importe quelle machine avec doc
 
     # Install Docker 
     sudo dnf update -y
-    sudo dnf install -y docker
+    sudo dnf install -y docker git
     sudo systemctl enable --now docker
     sudo usermod -aG docker ec2-user
 
@@ -30,8 +30,7 @@ Installation sur une instance EC2 (AWS) ou sur n'importe quelle machine avec doc
     echo "version $VER"
 
     sudo mkdir -p /usr/local/lib/docker/cli-plugins
-    sudo curl -fSL "https://github.com/docker/buildx/releases/download/${VER}/buildx-${VER}.linux-${BX_ARCH}" \
-      -o /usr/local/lib/docker/cli-plugins/docker-buildx
+    sudo curl -fSL "https://github.com/docker/buildx/releases/download/v0.37.1/buildx-v0.37.1.linux-amd64" -o /usr/local/lib/docker/cli-plugins/docker-buildx
     sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
 
 
@@ -112,7 +111,7 @@ PostGis
           ├── docker-compose.yml
           └── init
               ├── 01-schema.sql
-              ├── 02-tables.sql
+              ├── 02-ddl.sql
               └── 03-data.sql
 
 
@@ -349,4 +348,3 @@ Création manuelle
             </div>
             """
             return folium.Popup(html, max_width=260)
-
