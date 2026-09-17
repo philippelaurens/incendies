@@ -1,5 +1,5 @@
 
-SET search_path TO incendies, public
+SET search_path TO incendies, public;
 
 -- DROP TYPE incendies.box2d;
 
