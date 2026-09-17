@@ -1,90 +1,6 @@
 
 SET search_path TO incendies, public;
 
--- DROP TYPE incendies.box2d;
-
-CREATE TYPE incendies.box2d (
-	INPUT = incendies.box2d_in,
-	OUTPUT = incendies.box2d_out,
-	INTERNALLENGTH = 65,
-	ALIGNMENT = 4,
-	STORAGE = plain,
-	CATEGORY = U,
-	DELIMITER = ',');
-
--- DROP TYPE incendies.box2df;
-
-CREATE TYPE incendies.box2df (
-	INPUT = incendies.box2df_in,
-	OUTPUT = incendies.box2df_out,
-	INTERNALLENGTH = 16,
-	ALIGNMENT = 8,
-	STORAGE = plain,
-	CATEGORY = U,
-	DELIMITER = ',');
-
--- DROP TYPE incendies.box3d;
-
-CREATE TYPE incendies.box3d (
-	INPUT = incendies.box3d_in,
-	OUTPUT = incendies.box3d_out,
-	INTERNALLENGTH = 52,
-	ALIGNMENT = 8,
-	STORAGE = plain,
-	CATEGORY = U,
-	DELIMITER = ',');
-
--- DROP TYPE incendies.geography;
-
-CREATE TYPE incendies.geography (
-	INPUT = incendies.geography_in,
-	OUTPUT = incendies.geography_out,
-	RECEIVE = incendies.geography_recv,
-	SEND = incendies.geography_send,
-	TYPMOD_IN = incendies.geography_typmod_in,
-	TYPMOD_OUT = incendies.geography_typmod_out,
-	ANALYZE = incendies.geography_analyze,
-	ALIGNMENT = 8,
-	STORAGE = compressed,
-	CATEGORY = U,
-	DELIMITER = ':');
-
--- DROP TYPE incendies.geometry;
-
-CREATE TYPE incendies.geometry (
-	INPUT = incendies.geometry_in,
-	OUTPUT = incendies.geometry_out,
-	RECEIVE = incendies.geometry_recv,
-	SEND = incendies.geometry_send,
-	TYPMOD_IN = incendies.geometry_typmod_in,
-	TYPMOD_OUT = incendies.geometry_typmod_out,
-	ANALYZE = incendies.geometry_analyze,
-	ALIGNMENT = 8,
-	STORAGE = compressed,
-	CATEGORY = U,
-	DELIMITER = ':');
-
--- DROP TYPE incendies.gidx;
-
-CREATE TYPE incendies.gidx (
-	INPUT = incendies.gidx_in,
-	OUTPUT = incendies.gidx_out,
-	ALIGNMENT = 8,
-	STORAGE = plain,
-	CATEGORY = U,
-	DELIMITER = ',');
-
--- DROP TYPE incendies.spheroid;
-
-CREATE TYPE incendies.spheroid (
-	INPUT = incendies.spheroid_in,
-	OUTPUT = incendies.spheroid_out,
-	INTERNALLENGTH = 65,
-	ALIGNMENT = 8,
-	STORAGE = plain,
-	CATEGORY = U,
-	DELIMITER = ',');
-
 -- DROP SEQUENCE incendies.commune_id_commune_seq;
 
 CREATE SEQUENCE incendies.commune_id_commune_seq
@@ -258,21 +174,6 @@ CREATE TABLE incendies.region (
 );
 
 
--- incendies.spatial_ref_sys definition
-
--- Drop table
-
--- DROP TABLE incendies.spatial_ref_sys;
-
-CREATE TABLE incendies.spatial_ref_sys (
-	srid int4 NOT NULL,
-	auth_name varchar(256) NULL,
-	auth_srid int4 NULL,
-	srtext varchar(2048) NULL,
-	proj4text varchar(2048) NULL,
-	CONSTRAINT spatial_ref_sys_pkey PRIMARY KEY (srid),
-	CONSTRAINT spatial_ref_sys_srid_check CHECK (((srid > 0) AND (srid <= 998999)))
-);
 
 
 -- incendies.tmp_commune definition
