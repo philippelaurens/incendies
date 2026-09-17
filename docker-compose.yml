@@ -21,7 +21,9 @@ services:
     restart: unless-stopped
 
   app:
-    build: ./app/streamlit
+    build:
+      context: .
+      dockerfile: app/streamlit/Dockerfile
     container_name: streamlit
     environment:
       POSTGRES_HOST: db
