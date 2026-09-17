@@ -1,3 +1,3 @@
-CREATE SCHEMA IF NOT EXISTS incendies;
+CREATE SCHEMA incendies AUTHORIZATION gis_app;
 
-SET search_path TO incendies, public;
+CREATE EXTENSION IF NOT EXISTS postgis;
