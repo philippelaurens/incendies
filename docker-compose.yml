@@ -1,47 +1,125 @@
 services:
+
+  # ==========================================================
+  # PostgreSQL + PostGIS
+  # ==========================================================
+
   db:
     image: postgis/postgis:17-3.5
     container_name: postgis
+
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+
     ports:
       - "5433:5432"
+
     volumes:
       - postgis_data:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d
+
     networks:
       - gis_net
+
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
+
     restart: unless-stopped
+
+
+  # ==========================================================
+  # MLflow
+  # ==========================================================
+
+  # mlflow:
+  #   image: ghcr.io/mlflow/mlflow:v3.16.0
+  mlflow:
+    build:
+      context: .
+      dockerfile: app/mlflow/Dockerfile
+    container_name: mlflow
+
+    environment:
+      MLFLOW_BACKEND_STORE_URI: >-
+        postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/mlflow
+
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/mlflow
+
+    ports:
+      - "5000:5000"
+
+    volumes:
+      - ./notebooks/mlruns:/home/coule/Documents/projets/incendies/notebooks/mlruns
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+    networks:
+      - gis_net
+
+    restart: unless-stopped
+
+
+  # ==========================================================
+  # Streamlit
+  # ==========================================================
 
   app:
     build:
       context: .
       dockerfile: app/streamlit/Dockerfile
+
     container_name: streamlit
+
     environment:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+
     ports:
       - "8501:8501"
+
     depends_on:
       db:
         condition: service_healthy
+
     networks:
       - gis_net
+
     restart: unless-stopped
+
+
+# ============================================================
+# Volumes
+# ============================================================
 
 volumes:
   postgis_data:
+
+
+# ============================================================
+# Network
+# ============================================================
 
 networks:
   gis_net:
