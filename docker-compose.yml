@@ -17,6 +17,7 @@ services:
       - "5433:5432"
 
     volumes:
+      # sauvegarder dans un volume Docker : postgis_data
       - postgis_data:/var/lib/postgresql/data
       - ./init:/docker-entrypoint-initdb.d
 
