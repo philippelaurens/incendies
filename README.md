@@ -87,7 +87,7 @@ Descriptive analysis of fires data after data cleaning :<br>
 **Creation of features:**
 - spatio-temporal city/day level aggregation grid `city x day`
 - spatial cyclic and temporal contagion related features
-	
+
 
 **Postponed feature ideas :**
 - gliding temporal windows
@@ -124,7 +124,7 @@ extensions de modélisation.
 The split dates sont définies dans la cellule 3 de
 [notebooks/modeling.ipynb](notebooks/modeling.ipynb) :
 
-- Train : 2006–2022 inclus
+- Train : 2016–2022 inclus
 - Validation : 2023
 - Test final hors temps : 2024 et années suivantes
 - Grid Search sur un sous-échantillon stratifié du train, avec ratio maximal de
