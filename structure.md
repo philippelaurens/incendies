@@ -10,6 +10,13 @@
 │       ├── __pycache__
 │       │   └── app.cpython-311.pyc
 │       ├── app.py
+│       ├── app_old.py
+│       ├── model_production
+│       │   ├── MLmodel
+│       │   ├── conda.yaml
+│       │   ├── model.skops
+│       │   ├── python_env.yaml
+│       │   └── requirements.txt
 │       ├── popups.py
 │       └── requirements.txt
 ├── consignes
@@ -74,6 +81,20 @@
 │   ├── mlruns
 │   │   └── 1
 │   │       └── models
+│   │           ├── m-075b804595d046acb05c33b1e5cd4157
+│   │           │   └── artifacts
+│   │           │       ├── MLmodel
+│   │           │       ├── conda.yaml
+│   │           │       ├── model.skops
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           ├── m-402821c97a3e4bf685b61fc5fe93206d
+│   │           │   └── artifacts
+│   │           │       ├── MLmodel
+│   │           │       ├── conda.yaml
+│   │           │       ├── model.skops
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
 │   │           └── m-4f58fe63d8da4385bfc301d0d9b648e0
 │   │               └── artifacts
 │   │                   ├── MLmodel
@@ -115,4 +136,4 @@
 │   └── feature_utils.py
 └── uv.lock
 
-34 directories, 82 files
+39 directories, 98 files

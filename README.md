@@ -151,6 +151,41 @@ validation 2023. Le meilleur modèle est ensuite réentraîné sur tout le train
 Chaque essai et le modèle final sont enregistrés dans MLflow, dans
 l'expérience `Prediction_Risque_Incendies`.
 
+##### 1 : Data Preparation & Architecture Base de Données
+Nettoyage BDIFF & INSEE :
+standardisé les noms de colonnes et optimisé l'empreinte mémoire avec des types Int32/Float64 compatibles PostgreSQL.
+
+La bonne pratique de conserver les NaN pour la répartition des surfaces brûlées (forêt, maquis, etc.) a permis de ne pas fausser les données avec des zéros artificiels.
+
+Exclusion géographique : Le filtrage des départements d'Outre-mer a permis de concentrer l'analyse sur la métropole et la Corse.
+
+##### 2 : Data Engineering (Feature Engineering)
+Grille Spatio-Temporelle : L'approche par produit cartésien (Commune × Année × Mois) est la seule méthode valide pour générer les classes négatives (les jours sans feux).
+
+Zéro Data Leakage : les variables historiques glissantes (ex: cumuls sur 12 mois) et l'indice de contagion spatiale (voisinage de 30 km calculé via cKDTree) utilisent tous un décalage strict dans le temps (shift(1)).
+
+Le modèle ne regarde que le passé.
+
+Variables calendaires : L'ajout de la saisonnalité (sin/cos) et de l'impact de l'activité humaine (vacances, week-ends) vient compenser partiellement le manque de météo.
+
+##### 3 : Data Analyse (EDA)
+Le croisement des données a confirmé le déséquilibre extrême (1 jour avec feu pour plusieurs dizaines de jours normaux).
+
+L'utilisation de cartes interactives (Heatmaps Folium) a permis de repérer les hotspots méditerranéens.
+
+##### 4 : Modélisation & Tracking MLflow
+Séparation temporelle stricte :
+
+L'utilisation de l'historique jusqu'en 2022 pour l'entraînement
+
+2023 pour la validation (Grid Search)
+
+2024-2025 pour le test final hors-temps
+
+garantit une évaluation non biaisée.
+
+Sous-échantillonnage : Le ratio 1:10 appliqué sur le jeu d'entraînement pour le Grid Search a permis d'accélérer l'optimisation tout en forçant le modèle à voir la classe minoritaire.
+
 ## MLflow tracking tool consultation
 
 The project uses a containerized Postgres Database `mlflow.db` to track the machine learning process.<br>
@@ -179,3 +214,9 @@ src/             Configurationand constants
 utils/           cleaning, analyse and feature engineering functions
 app/streamlit/   Application
 ```
+
+
+## Perspective d'amélioration
+architecture cible idéale (Microservices) :<br>
+FastAPI + Uvicorn (Production)<br>
+Séparer le Front (Streamlit) du Back (FastAPI) permet de faire scaler l'API de prédiction indépendamment si des milliers d'utilisateurs se connectent

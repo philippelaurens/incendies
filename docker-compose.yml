@@ -109,6 +109,9 @@ services:
 
     restart: unless-stopped
 
+    volumes:
+      - /home/coule/Documents/projets/incendies/notebooks/mlruns:/home/coule/Documents/projets/incendies/notebooks/mlruns
+
 
 # ============================================================
 # Volumes

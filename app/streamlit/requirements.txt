@@ -1,6 +1,9 @@
 streamlit
 psycopg[binary]
+psycopg2-binary
 pandas
 folium
 streamlit-folium
 python-dotenv
+mlflow
+lightgbm

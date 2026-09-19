@@ -1,18 +1,9 @@
 import math
 from datetime import UTC, datetime
-from pathlib import Path
 
 import folium
-
-# models
-import joblib
-import mlflow
-import mlflow.lightgbm
 import pandas as pd
 import psycopg
-import skops.io as sio
-
-# streamlit
 import streamlit as st
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
@@ -29,9 +20,11 @@ from src.config import (
     PORT,
     TILES_SERVER,
     USER,
-    MLFLOW_URI
+    MLFOW_URI,
 )
 
+RUN_ID="049a152213ff4be8b27c9fd8444e78ed"
+RUN_URL=f"https://127.0.0.1:5000/#/experiments/1/runs/{RUN_ID}"
 
 
 SEASONS = {
@@ -78,16 +71,8 @@ def get_surface_bounds():
         return tuple(float(value) for value in cur.fetchone())
 
 
-# =========================   V1 limite à la region PACA --- DEBUT       ===========================================
-@st.cache_data(ttl=3600)
-def get_regions():
-    """Charge la liste des régions disponibles en base."""
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("SELECT DISTINCT nom FROM incendies.region WHERE nom IS NOT NULL ORDER BY nom")
-        return [row[0] for row in cur.fetchall()]
-
 @st.cache_data(ttl=600)
-def get_incendies(years, months, surface_min, surface_max, vegetation, origins, regions):
+def get_incendies(years, months, surface_min, surface_max, vegetation, origins):
     """Charge les incendies géolocalisés selon les filtres de l'interface."""
     conditions = [
         "l.latitude IS NOT NULL",
@@ -103,12 +88,13 @@ def get_incendies(years, months, surface_min, surface_max, vegetation, origins, 
         int(surface_max * 10_000),
     ]
     if vegetation:
-        conditions.append("(" + " OR ".join(VEGETATION_FILTERS[item] for item in vegetation) + ")")
+        conditions.append(
+            "(" + " OR ".join(VEGETATION_FILTERS[item] for item in vegetation) + ")"
+        )
     if origins:
-        conditions.append("(" + " OR ".join(ORIGIN_FILTERS[item] for item in origins) + ")")
-    if regions:
-        conditions.append("r.nom = ANY(%s)")
-        params.append(list(regions))
+        conditions.append(
+            "(" + " OR ".join(ORIGIN_FILTERS[item] for item in origins) + ")"
+        )
 
     query = f"""
         SELECT
@@ -134,7 +120,7 @@ def get_incendies(years, months, surface_min, surface_max, vegetation, origins, 
 
 @st.cache_data(ttl=3600)
 def get_communes():
-    """Charge UNIQUEMENT les communes de la région PACA (périmètre de modélisation)."""
+    """Charge les communes proposées dans l'interface de prédiction."""
     query = """
         SELECT
             c.code_insee,
@@ -144,102 +130,12 @@ def get_communes():
         FROM incendies.commune c
         LEFT JOIN incendies.departement d ON d.code = c.departement
         LEFT JOIN incendies.region r ON r.id = c.region
-        WHERE c.region = 17
         ORDER BY c.nom_standard, c.code_insee
     """
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(query)
         columns = [column.name for column in cur.description]
         return pd.DataFrame(cur.fetchall(), columns=columns)
-# =========================       V1 limite à la region PACA ---  FIN   ===========================================
-
-# =================   Zone franc metropolitaine et corse DEBUT  ===================================
-# @st.cache_data(ttl=600)
-# def get_incendies(years, months, surface_min, surface_max, vegetation, origins):
-#     """Charge les incendies géolocalisés selon les filtres de l'interface."""
-#     conditions = [
-#         "l.latitude IS NOT NULL",
-#         "l.longitude IS NOT NULL",
-#         "i.annee = ANY(%s)",
-#         "EXTRACT(MONTH FROM i.date_premiere_alerte)::int = ANY(%s)",
-#         "i.surface_parcourue BETWEEN %s AND %s",
-#     ]
-#     params = [
-#         list(years),
-#         list(months),
-#         int(surface_min * 10_000),
-#         int(surface_max * 10_000),
-#     ]
-#     if vegetation:
-#         conditions.append(
-#             "(" + " OR ".join(VEGETATION_FILTERS[item] for item in vegetation) + ")"
-#         )
-#     if origins:
-#         conditions.append(
-#             "(" + " OR ".join(ORIGIN_FILTERS[item] for item in origins) + ")"
-#         )
-
-#     query = f"""
-#         SELECT
-#             i.annee,
-#             EXTRACT(MONTH FROM i.date_premiere_alerte)::int AS mois,
-#             i.surface_parcourue / 10000.0 AS surface_ha,
-#             l.latitude::float AS latitude,
-#             l.longitude::float AS longitude,
-#             COALESCE(r.nom, 'Région non renseignée') AS region,
-#             COALESCE(n.nom, 'Origine non renseignée') AS origine
-#         FROM incendies.incendie i
-#         JOIN incendies.localisation l ON l.id_localisation = i.localisation
-#         LEFT JOIN incendies.commune c ON c.code_insee = i.code_insee
-#         LEFT JOIN incendies.region r ON r.id = c.region
-#         LEFT JOIN incendies.nature n ON n.id = i.nature
-#         WHERE {' AND '.join(conditions)}
-#     """
-#     with get_conn() as conn, conn.cursor() as cur:
-#         cur.execute(query, params)
-#         columns = [column.name for column in cur.description]
-#         return pd.DataFrame(cur.fetchall(), columns=columns)
-
-
-# @st.cache_data(ttl=3600)
-# def get_communes():
-#     """Charge les communes proposées dans l'interface de prédiction."""
-#     query = """
-#         SELECT
-#             c.code_insee,
-#             c.nom_standard,
-#             COALESCE(d.nom, 'Département non renseigné') AS departement,
-#             COALESCE(r.nom, 'Région non renseignée') AS region
-#         FROM incendies.commune c
-#         LEFT JOIN incendies.departement d ON d.code = c.departement
-#         LEFT JOIN incendies.region r ON r.id = c.region
-#         ORDER BY c.nom_standard, c.code_insee
-#     """
-#     with get_conn() as conn, conn.cursor() as cur:
-#         cur.execute(query)
-#         columns = [column.name for column in cur.description]
-#         return pd.DataFrame(cur.fetchall(), columns=columns)
-
-# =========================  Zone franc metropolitaine et corse FIN ===================================
-
-
-# # === model selection and loading  other version============
-# Pointe vers la base de données MLflow
-mlflow.set_tracking_uri(MLFLOW_URI)
-
-# Renseigne l'URI du meilleur modèle (à récupérer dans l'interface MLflow)
-MODEL_URI = "runs:/d3c8b3368ed44e93941dd5fb3c025eea/model"
-
-@st.cache_resource
-def load_model():
-    """Charge le modèle MLflow dynamiquement en le gardant en cache RAM."""
-    # Note: MLflow va renvoyer directement l'objet modèle (le dictionnaire ou le classifieur)
-    return mlflow.lightgbm.load_model(MODEL_URI)
-
-# Le reste du code d'inférence s'adapte selon l'objet retourné
-model = load_model()
-# # =================================================
-
 
 
 def selected_months(selected_month_names, selected_seasons):
@@ -328,14 +224,6 @@ with historical_tab:
     else:
         with st.sidebar:
             st.header("Filtres historiques")
-
-            # V1 filtre dynamique avec PACA par défaut -- debut =============================
-            all_regions = get_regions()
-            paca_name = "Provence-Alpes-Côte d'Azur"
-            default_region = [paca_name] if paca_name in all_regions else []
-            selected_regions = st.multiselect("Régions", all_regions, default=default_region)
-            # V1 filtre dynamique avec PACA par défaut -- fin =============================
-
             years = st.multiselect("Années", AVAILABLE_YEARS, default=AVAILABLE_YEARS)
             month_names = st.multiselect("Mois", MONTH_NAMES, default=MONTH_NAMES)
             seasons = st.multiselect("Saisons", list(SEASONS), default=list(SEASONS))
@@ -350,7 +238,7 @@ with historical_tab:
             st.info("Sélectionnez au moins une année et un mois correspondant aux saisons choisies.")
         else:
             try:
-                incendies = get_incendies(years, months, *surface_range, vegetation, origins, selected_regions)
+                incendies = get_incendies(years, months, *surface_range, vegetation, origins)
             except psycopg.Error as error:
                 st.error(f"Impossible de charger les incendies : {error}")
             else:
@@ -361,17 +249,21 @@ with historical_tab:
                 else:
                     display_statistics(incendies)
 
+
+
 with forecast_tab:
     st.header("Prédiction des risques")
-    st.caption("Ce simulateur évalue le risque d'incendie basé sur l'historique glissant, la géographie et la contagion spatiale.")
+    st.caption(
+        "Ce simulateur évalue le risque d'incendie basé sur l'historique, la géographie et la saisonnalité."
+    )
 
-    with st.expander("Variables exploitées par le modèle prédictif", expanded=False):
+    with st.expander("Variables prises en compte par le modèle", expanded=False):
         st.markdown(
             """
-            - Historique des départs de feu à 30j, 90j et 365j.
-            - Surfaces brûlées sur 5 ans.
-            - Contagion spatiale : incendies récents dans des rayons de 10, 20 et 50 km.
-            - Caractéristiques statiques : densité, population, altitude.
+            - Historique glissant des incendies de la commune (30j, 90j, 365j) ;
+            - Contagion spatiale : incendies récents dans les communes voisines (10km, 20km, 50km) ;
+            - Saisonnalité (jour, mois, week-end, vacances) ;
+            - Caractéristiques géographiques (densité, altitude).
             """
         )
 
@@ -383,14 +275,20 @@ with forecast_tab:
         commune_options = communes.to_dict("records")
         with st.form("prediction_form"):
             selected_commune = st.selectbox(
-                "Sélectionnez une commune",
+                "Commune",
                 commune_options,
                 format_func=lambda commune: (
                     f"{commune['nom_standard']} ({commune['code_insee']}) — "
                     f"{commune['departement']}"
                 ),
             )
-            target_date = st.date_input("Date cible de prédiction", value=datetime.now(UTC).date())
+            target_date = st.date_input(
+                "Date à évaluer", value=datetime.now(UTC).date()
+            )
+
+            # (Optionnel) Ajout d'un sélecteur de modèle MLflow si tu en as plusieurs
+            # Dans un cadre de production simple, tu peux coder le run_id en dur
+            model_uri = st.text_input("URI du Modèle MLflow (ex: runs:/RUN_ID/model)", "runs:/RUN_ID/model")
 
             submitted = st.form_submit_button("Évaluer le risque")
 
@@ -398,30 +296,30 @@ with forecast_tab:
             st.subheader("Score de risque")
 
             try:
-                # 1. Chargement optimisé du modèle LightGBM depuis MLflow
-                with st.spinner("Chargement du modèle d'intelligence artificielle..."):
-                    model = load_model()
+                # 1. Chargement du Modèle depuis MLflow
+                import mlflow.lightgbm # ou xgboost selon ton choix
 
-                # 2. Requête en base pour construire le vecteur de Features (X)
-                # CRITIQUE : Cette requête DOIT retourner exactement les mêmes colonnes
-                # (et dans le même ordre) que le X_train utilisé lors de la modélisation.
+                # S'assurer que MLflow pointe vers la bonne BDD (URI défini dans src/config.py)
+                mlflow.set_tracking_uri(MLFLOW_URI)
+
+                with st.spinner("Chargement du modèle..."):
+                    model = mlflow.lightgbm.load_model(model_uri)
+
+                # 2. Requête BDD pour construire le vecteur de Features (X)
+                # Cette étape est CRUCIALE. Tu dois récupérer depuis PostgreSQL les
+                # mêmes 25 colonnes exactes qui ont servi à l'entraînement de ton modèle,
+                # pour cette 'code_insee' et cette 'target_date'.
+
+                # Exemple de requête (à adapter selon le schéma exact de ta vue/table pour l'inférence)
                 code_insee = selected_commune['code_insee']
 
                 query_features = """
                     SELECT
-                        cj.nb_incendies_30j,
-                        cj.nb_incendies_90j,
-                        cj.nb_incendies_365j,
-                        cj.surface_totale_5a,
-                        cj.buffer_10km,
-                        cj.buffer_20km,
-                        cj.buffer_50km,
-                        c.population,
-                        c.superficie_hectare,
-                        c.densite,
-                        c.altitude_moyenne,
-                        c.altitude_minimale,
-                        c.altitude_maximale
+                        cj.nb_incendies_30j, cj.nb_incendies_90j, cj.nb_incendies_365j,
+                        cj.surface_totale_5a, cj.buffer_10km, cj.buffer_20km, cj.buffer_50km,
+                        c.population, c.superficie_hectare, c.densite,
+                        c.altitude_moyenne, c.altitude_minimale, c.altitude_maximale
+                        -- Ajouter ici les features temporelles (sin_mois, cos_mois, is_weekend...)
                     FROM incendies.commune_jour cj
                     JOIN incendies.commune c ON cj.id_commune = c.id_commune
                     WHERE c.code_insee = %s AND cj.date_jour = %s;
@@ -432,30 +330,76 @@ with forecast_tab:
                     result = cur.fetchone()
 
                     if not result:
-                        st.warning(f"Données historiques non disponibles pour {selected_commune['nom_standard']} à la date du {target_date.strftime('%d/%m/%Y')}.")
+                        st.warning(f"Données historiques indisponibles pour {selected_commune['nom_standard']} à cette date. Calcul à la volée requis ou date hors périmètre.")
                     else:
                         columns = [column.name for column in cur.description]
                         X_pred = pd.DataFrame([result], columns=columns)
 
-                        # Forcer la conversion de toutes les colonnes en float pour LightGBM
-                        X_pred = X_pred.astype(float)
-
-                        # 3. Prédiction (Probabilité de la classe 1)
-                        risk_prob = model.predict_proba(X_pred)[0][1]
+                        # 3. Prédiction
+                        risk_prob = model.predict_proba(X_pred)[0][1] # Probabilité de la classe 1 (Incendie)
 
                         # 4. Affichage visuel (Jauge)
                         st.metric(
-                            label=f"Probabilité d'incendie pour {selected_commune['nom_standard']} le {target_date.strftime('%d/%m/%Y')}",
+                            label=f"Probabilité d'incendie le {target_date.strftime('%d/%m/%Y')}",
                             value=f"{risk_prob * 100:.2f} %"
                         )
                         st.progress(float(risk_prob))
 
-                        if risk_prob > 0.10:
+                        if risk_prob > 0.10: # Seuil d'alerte arbitraire à ajuster
                             st.error("⚠️ Alerte : Risque très élevé de départ de feu.")
                         elif risk_prob > 0.02:
-                            st.warning("🟠 Risque modéré (vigilance recommandée).")
+                            st.warning("🟠 Risque modéré.")
                         else:
                             st.success("🟢 Risque faible.")
 
             except Exception as e:
-                st.error(f"Erreur technique lors de la prédiction : {e!s}")
+                st.error(f"Erreur lors de la prédiction : {str(e)}")
+
+
+
+
+
+
+
+# with forecast_tab:
+#     st.header("Prédiction des risques")
+#     st.caption(
+#         "Le score sera fourni par le modèle de clustering géo-temporel en cours de développement."
+#     )
+
+#     with st.expander("Variables prises en compte par le futur modèle", expanded=True):
+#         st.markdown(
+#             """
+#             - Historique des incendies de la commune et des communes voisines ;
+#             - jour et mois de l'année pour représenter la saisonnalité ;
+#             - surfaces de végétation par type, selon les définitions BDIFF.
+#             """
+#         )
+
+#     try:
+#         communes = get_communes()
+#     except psycopg.Error as error:
+#         st.error(f"Impossible de charger les communes : {error}")
+#     else:
+#         commune_options = communes.to_dict("records")
+#         with st.form("prediction_form"):
+#             selected_commune = st.selectbox(
+#                 "Commune",
+#                 commune_options,
+#                 format_func=lambda commune: (
+#                     f"{commune['nom_standard']} ({commune['code_insee']}) — "
+#                     f"{commune['departement']}"
+#                 ),
+#             )
+#             target_date = st.date_input(
+#                 "Date à évaluer", value=datetime.now(UTC).date()
+#             )
+#             submitted = st.form_submit_button("Évaluer le risque")
+
+#         if submitted:
+#             st.subheader("Score de risque")
+#             st.info(
+#                 "La requête est prête pour "
+#                 f"{selected_commune['nom_standard']} le {target_date:%d/%m/%Y}. "
+#                 "Le score apparaîtra ici lorsque le module de prédiction sera connecté."
+#             )
