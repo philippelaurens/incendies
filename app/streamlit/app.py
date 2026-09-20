@@ -1,18 +1,26 @@
+"""
+Role: Streamlit frontend application for the interactive mapping of historical fires
+and the prediction of daily fire risk for municipalities in the PACA region.
+
+Inputs:
+- PostgreSQL database: Historical fire data and daily spatial grid (incendies schema).
+- MLflow: Trained machine learning model artifact (LightGBM/XGBoost).
+
+Outputs:
+- Interactive web dashboard providing descriptive statistics, heatmaps, and a risk prediction simulator.
+"""
+
 import math
 from datetime import UTC, datetime
 from pathlib import Path
 
 import folium
-
-# models
 import joblib
 import mlflow
 import mlflow.lightgbm
 import pandas as pd
 import psycopg
 import skops.io as sio
-
-# streamlit
 import streamlit as st
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
@@ -32,19 +40,20 @@ from src.config import (
     MLFLOW_URI
 )
 
-
-
+# UI and Dataset filters (Vocabulary remains in French as per requirements)
 SEASONS = {
     "Hiver": (12, 1, 2),
     "Printemps": (3, 4, 5),
     "Été": (6, 7, 8),
     "Automne": (9, 10, 11),
 }
+
 VEGETATION_FILTERS = {
     "Forêt": "COALESCE(i.surface_foret, 0) > 0",
     "Maquis / garrigue": "COALESCE(i.surface_maquis_garrigues, 0) > 0",
     "Autres milieux naturels": "COALESCE(i.autres_surfaces_naturelles, 0) > 0",
 }
+
 ORIGIN_FILTERS = {
     "Naturelle": "n.nom ILIKE 'Naturelle%'",
     "Accidentelle": "(n.nom ILIKE 'Accidentelle%' OR n.nom ILIKE 'Involontaire%')",
@@ -53,6 +62,7 @@ ORIGIN_FILTERS = {
 
 
 def get_conn():
+    """Establishes and returns a connection to the PostgreSQL database."""
     return psycopg.connect(
         host=HOST,
         port=PORT,
