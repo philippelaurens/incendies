@@ -1,7 +1,12 @@
-# Incendies: Wildfire Risk Prediction in France
+# Incendies
+## Wildfire Risk Prediction in France
 
-## Goal
-Develop an end-to-end predictive intelligence system to estimate the daily forest fire risk for French municipalities[cite: 1]. For the V1 prototype, the ambition has been adjusted to focus exclusively on the PACA region from 2016 onwards, ensuring robust performance on a daily spatio-temporal grid
+### Goal :
+Develop an end-to-end predictive intelligence system to estimate the daily forest fire risk for French municipalities<br> For the V1 prototype, the ambition has been adjusted to focus exclusively on
+- the PACA region
+- from 2016 onwards<br>
+
+Ensuring robust performance on a daily spatio-temporal grid
 
 
 ## Data import
@@ -11,13 +16,11 @@ First thing's first, import the datasets :
 - Fires - [BDIFF](https://bdiff.agriculture.gouv.fr/incendies)
 - Cities - [Liste des communes de France 2026](https://www.data.gouv.fr/datasets/liste-des-communes-de-france-code-insee-codes-postaux-epci-population-superficie-62-indicateurs?resource_id=c63fd0b1-7987-46f6-b779-8b3ed889090c)
 
-## dataflow :
-
- `data/*_raw` > `data/*_clean` > `data/*_processed`.
 
 
 ## Architecture & Data Flow Workflow
-The data pipeline follows a `raw` > `clean` > `processed` structure, orchestrated via a PostgreSQL/PostGIS database and tracked with MLflow].
+The data pipeline follows a `raw` > `clean` > `processed` structure<br>
+ orchestrated via a PostgreSQL/PostGIS database and tracked with MLflow].
 
 
 
@@ -55,7 +58,7 @@ The data pipeline follows a `raw` > `clean` > `processed` structure, orchestrate
 
 ## MLflow Tracking
 The MLflow UI is accessible at [http://127.0.0.1:5000](http://127.0.0.1:5000).
-The `Prediction_Risque_Incendies` experiment logs all model parameters, dataset shapes, and metrics (such as `pr_auc_validation` and `roc_auc_test_final`). 
+The `Prediction_Risque_Incendies` experiment logs all model parameters, dataset shapes, and metrics (such as `pr_auc_validation` and `roc_auc_test_final`).
 
 ## Future Perspectives
 *   **Microservices Architecture**: Decouple the Streamlit frontend from the backend by deploying a FastAPI + Uvicorn prediction API for production scalability.
@@ -170,25 +173,61 @@ The split dates sont définies dans la cellule 3 de
 	10 négatifs pour 1 positif
 - Réentraînement final sur l'ensemble du train
 
-## Pipeline actuel
+## Workflow
 
-Le notebook `feat_eng.ipynb` construit une grille mensuelle `commune x année x
-mois` et ajoute les variables calendaires agrégées : week-ends, jours fériés,
-vacances scolaires et jours non travaillés. Les scores historiques et les
-variables de risque sont calculés de manière causale, uniquement avec les mois
-précédents.
+```mermaid
 
-Le dataset versionné est exporté dans
-`data/data_processed/incendies_features_v2.parquet`, avec son fichier de
-métadonnées `incendies_features_v2.metadata.json` contenant notamment le hash
-SHA-256.
+flowchart TB
+    classDef database fill:#1168bd,stroke:#0b4884,stroke-width:2px,color:#fff;
+    classDef process fill:#2ea043,stroke:#237632,stroke-width:2px,color:#fff;
+    classDef app fill:#f39c12,stroke:#c87f0a,stroke-width:2px,color:#fff;
+    classDef highlight fill:#8e44ad,stroke:#6c3483,stroke-width:2px,color:#fff;
 
-Le notebook `modeling.ipynb` compare LightGBM et XGBoost par grille
-d'hyperparamètres. La recherche utilise le train sous-échantillonné et la
-validation 2023. Le meilleur modèle est ensuite réentraîné sur tout le train et
-évalué sur 2023 puis sur le test hors temps.
-Chaque essai et le modèle final sont enregistrés dans MLflow, dans
-l'expérience `Prediction_Risque_Incendies`.
+    subgraph S1 [1. Data Import & Preparation]
+        direction TB
+        R1[(BDIFF Incendies CSV)] --> P1(prep_bdiff.ipynb):::process
+        R2[(INSEE Communes CSV)] --> P2(prep_communes.ipynb):::process
+        P1 --> C1[(Clean Parquet)]:::database
+        P2 --> C2[(Clean Parquet)]:::database
+    end
+
+    subgraph S2 [2. Containerization & Database]
+        direction TB
+        C1 --> DB[(PostgreSQL / PostGIS <br> Docker)]:::database
+        C2 --> DB
+    end
+
+    subgraph S3 [3. Data Engineering - PACA V1 Focus]
+        direction TB
+        DB --> T1(table_c_j.ipynb):::process
+        T1 --> V1[(v_commune_paca)]:::database
+        T1 --> G1[(commune_jour)]:::database
+        V1 --> M1(scripts/maj.py):::process
+        G1 --> M1
+        M1 --> F1[(Updated Grid No Data Leak: <br> nb_incendies_30j, 90j, 365j <br> surface_totale_5a <br> buffer_10km, 20km, 50km)]:::highlight
+    end
+
+    subgraph S4 [4. Modeling & MLflow Tracking]
+        direction TB
+        F1 --> M2(model_daily.ipynb):::process
+        M2 --> M3((LightGBM / XGBoost)):::process
+        M3 <--> ML[(MLflow Registry)]:::highlight
+    end
+
+    subgraph S5 [5. Streamlit Application]
+        direction TB
+        F1 --> A1(app.py):::app
+        ML --> A1
+        A1 --> UI{{Interactive Dashboard <br> Cartographie & Prévision}}:::app
+    end
+
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
+```
+
+
 
 ##### 1 : Data Preparation & Architecture Base de Données
 Nettoyage BDIFF & INSEE :
