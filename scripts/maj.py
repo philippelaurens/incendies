@@ -1,7 +1,16 @@
-"""Met à jour les historiques de la table incendies.commune_jour.
+"""
+Role: Updates historical and spatial features in the 'commune_jour' table.
+It computes fire counts, burnt surfaces, and spatial buffer indicators
+strictly using past events to prevent temporal data leakage.
 
-Les compteurs sont calculés uniquement à partir des incendies antérieurs à
-chaque date de référence afin d'éviter toute fuite temporelle.
+Inputs:
+- Views: incendies.v_commune_paca, incendies.mv_communes_voisines_10km, 20km, 50km
+- Tables: incendies.incendie, incendies.commune_jour
+
+Outputs:
+- Updates columns in incendies.commune_jour:
+  nb_incendies_30j, nb_incendies_90j, nb_incendies_365j,
+  surface_totale_5a, buffer_10km, buffer_20km, buffer_50km
 """
 
 import sys
