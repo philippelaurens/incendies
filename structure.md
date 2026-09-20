@@ -1,30 +1,21 @@
 .
-├── README.md
-├── __pycache__
-│   └── config.cpython-311.pyc
 ├── app
 │   ├── mlflow
 │   │   └── Dockerfile
 │   └── streamlit
-│       ├── Dockerfile
-│       ├── __pycache__
-│       │   └── app.cpython-311.pyc
-│       ├── app.py
 │       ├── app_old.py
-│       ├── model_production
-│       │   ├── MLmodel
-│       │   ├── conda.yaml
-│       │   ├── model.skops
-│       │   ├── python_env.yaml
-│       │   └── requirements.txt
+│       ├── app_phil.py
+│       ├── app.py
+│       ├── Dockerfile
+│       ├── models
+│       │   ├── lightgbm.skops
+│       │   └── xgb_model.joblib
 │       ├── popups.py
 │       └── requirements.txt
-├── consignes
-│   └── a_faire.md
 ├── data
 │   ├── bdiff_data_clean
+│   │   ├── incendies_metropole_corse.parquet
 │   │   └── incendies.parquet
-│   ├── bdiff_data_processed
 │   ├── bdiff_data_raw
 │   │   ├── Incendies1971.csv
 │   │   ├── Incendies1976.csv
@@ -37,29 +28,24 @@
 │   │   ├── Incendies2011.csv
 │   │   ├── Incendies2016.csv
 │   │   └── Incendies2021.csv
-│   ├── data_processed
-│   │   ├── incendies_features_v2.metadata.json
-│   │   └── incendies_features_v2.parquet
 │   ├── df_dataset.parquet
 │   ├── geo_data_clean
-│   │   ├── communes.parquet
-│   │   └── communes_metropole_corse.parquet
-│   ├── geo_data_processed
+│   │   ├── communes_metropole_corse.parquet
+│   │   └── communes-metropole.parquet
 │   ├── geo_data_raw
 │   │   ├── communes-france-2025.csv
-│   │   └── communes-france-avec-polygon-2026.geojson
+│   │   └── communes-france-2026.csv
 │   └── spatio_temp
 │       └── df_spatio_temp.parquet
 ├── docker-compose.yml
 ├── documentation
 │   ├── csv2mysql
-│   │   ├── Mep.txt
 │   │   ├── incendies.pdf
-│   │   └── incendies.png
+│   │   ├── incendies.png
+│   │   └── Mep.txt
 │   └── mysql2postgis
 │       └── postgis_creation.txt
 ├── figures
-│   ├── carte_incendies.html
 │   ├── distribution_mensuelle_nb_incendies.png
 │   ├── evolution_annuelle_nb_incendies_surfaces_2011-2025.png
 │   ├── output.png
@@ -68,72 +54,112 @@
 │   ├── 01-schema.sql
 │   ├── 02-ddl.sql
 │   └── 03-data.sql
-├── mlflow.db
-├── notebooks
+├── legacy
 │   ├── csv2mysql
 │   │   └── incendies-database.ipynb
-│   ├── db_daily.ipynb
-│   ├── eda.ipynb
 │   ├── feat_eng.ipynb
-│   ├── feat_eng_daily.ipynb
 │   ├── mlflow.db
 │   ├── mlflow.db.backup
+│   ├── model_daily_samples.ipynb
+│   ├── model_monthly.ipynb
+│   └── tables_to_migrate.py
+├── notebooks
+│   ├── db_daily.ipynb
+│   ├── eda.ipynb
+│   ├── feat_eng_daily.ipynb
 │   ├── mlruns
 │   │   └── 1
 │   │       └── models
-│   │           ├── m-075b804595d046acb05c33b1e5cd4157
+│   │           ├── m-102f2cdd19274b0b81d9b579f1728bb5
 │   │           │   └── artifacts
-│   │           │       ├── MLmodel
 │   │           │       ├── conda.yaml
+│   │           │       ├── MLmodel
+│   │           │       ├── model.ubj
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           ├── m-1531186433e646a2878be4b61dc77e6f
+│   │           │   └── artifacts
+│   │           │       ├── conda.yaml
+│   │           │       ├── MLmodel
 │   │           │       ├── model.skops
 │   │           │       ├── python_env.yaml
 │   │           │       └── requirements.txt
-│   │           ├── m-402821c97a3e4bf685b61fc5fe93206d
+│   │           ├── m-4d85e991cefb4abeb93f611a663d2586
 │   │           │   └── artifacts
-│   │           │       ├── MLmodel
 │   │           │       ├── conda.yaml
+│   │           │       ├── MLmodel
 │   │           │       ├── model.skops
 │   │           │       ├── python_env.yaml
 │   │           │       └── requirements.txt
-│   │           └── m-4f58fe63d8da4385bfc301d0d9b648e0
+│   │           ├── m-53ed01edd9fb43ac98831146fdaf5d80
+│   │           │   └── artifacts
+│   │           │       ├── conda.yaml
+│   │           │       ├── MLmodel
+│   │           │       ├── model.ubj
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           ├── m-6fa81b31116f431ea97d25807333e7f9
+│   │           │   └── artifacts
+│   │           │       ├── conda.yaml
+│   │           │       ├── MLmodel
+│   │           │       ├── model.ubj
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           ├── m-9c5fed9ee7564c73b0daffdf05b51b5e
+│   │           │   └── artifacts
+│   │           │       ├── conda.yaml
+│   │           │       ├── MLmodel
+│   │           │       ├── model.ubj
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           ├── m-b21572804c3442cea47bcc0806c4959a
+│   │           │   └── artifacts
+│   │           │       ├── conda.yaml
+│   │           │       ├── MLmodel
+│   │           │       ├── model.skops
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           ├── m-b3b955667123449a8e80f5fce434ac6e
+│   │           │   └── artifacts
+│   │           │       ├── conda.yaml
+│   │           │       ├── MLmodel
+│   │           │       ├── model.skops
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           └── m-eeeb01b9412149439c3185e3f1efbe67
 │   │               └── artifacts
-│   │                   ├── MLmodel
 │   │                   ├── conda.yaml
-│   │                   ├── model.skops
+│   │                   ├── MLmodel
+│   │                   ├── model.ubj
 │   │                   ├── python_env.yaml
 │   │                   └── requirements.txt
 │   ├── model_daily.ipynb
-│   ├── model_daily_samples.ipynb
-│   ├── model_monthly.ipynb
 │   ├── prep_bdiff.ipynb
 │   ├── prep_communes.ipynb
-│   ├── table_c_j.ipynb
-│   └── tables_to_migrate.py
+│   ├── table_c_j past.ipynb
+│   └── table_c_j.ipynb
 ├── pyproject.toml
+├── README.md
 ├── scripts
+│   └── maj.py
 ├── src
 │   ├── __pycache__
 │   │   ├── config.cpython-311.pyc
-│   │   └── db.cpython-311.pyc
+│   │   └── config.cpython-312.pyc
 │   ├── config.py
 │   ├── create_db_commune.ipynb
 │   ├── create_db_incendie.ipynb
 │   ├── db.py
 │   └── extract_daily_grid.py
 ├── structure.md
-├── temp
-│   ├── brouillon.py
-│   └── consulte_la_bdd.py
 ├── utils
 │   ├── __pycache__
 │   │   ├── analysis_utils.cpython-311.pyc
-│   │   ├── cleaning_utils.cpython-311.pyc
-│   │   ├── dataset_utils.cpython-311.pyc
-│   │   └── feature_utils.cpython-311.pyc
+│   │   └── cleaning_utils.cpython-311.pyc
 │   ├── analysis_utils.py
 │   ├── cleaning_utils.py
 │   ├── dataset_utils.py
 │   └── feature_utils.py
 └── uv.lock
 
-39 directories, 98 files
+45 directories, 118 files
