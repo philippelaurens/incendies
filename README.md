@@ -1,23 +1,8 @@
-# incendies
+# Incendies: Wildfire Risk Prediction in France
 
-## Goal :  Fire risks prediction
-Develop an app that returns the fire risk for selected city at a selected time
-## Workflow
+## Goal
+Develop an end-to-end predictive intelligence system to estimate the daily forest fire risk for French municipalities[cite: 1]. For the V1 prototype, the ambition has been adjusted to focus exclusively on the PACA region from 2016 onwards, ensuring robust performance on a daily spatio-temporal grid
 
-- [Data import](data-import)
-- import des données communes
-- dataprep - nettoyage
-- [Analysis and feature engineering](analysis-and-feature-engineering)
-- [spatio-temporal split]()
-- [PostgreSQL database creation, with PostGIS extension](DataBase-creation)
-- containerization
-	- incendies-app---------------UI
-	- incendies-mlflow------------tracking ML
-	- postgis/postgis:17-3.5------DB
-- [Target definition](target-definition)
-- modelization on a data sample
-- selected model training on the whole dataset
--
 
 ## Data import
 
@@ -26,13 +11,67 @@ First thing's first, import the datasets :
 - Fires - [BDIFF](https://bdiff.agriculture.gouv.fr/incendies)
 - Cities - [Liste des communes de France 2026](https://www.data.gouv.fr/datasets/liste-des-communes-de-france-code-insee-codes-postaux-epci-population-superficie-62-indicateurs?resource_id=c63fd0b1-7987-46f6-b779-8b3ed889090c)
 
-## Data path
+## dataflow :
 
-dataflow : `data/*_raw` > `data/*_clean` > `data/*_processed`.
+ `data/*_raw` > `data/*_clean` > `data/*_processed`.
 
----
----
----
+
+## Architecture & Data Flow Workflow
+The data pipeline follows a `raw` > `clean` > `processed` structure, orchestrated via a PostgreSQL/PostGIS database and tracked with MLflow].
+
+
+
+### 1. Data Import & Cleaning
+*   **`notebooks/prep_bdiff.ipynb`**
+    *   **Input**: Official BDIFF datasets (`data/bdiff_data_raw/Incendies*.csv`)
+    *   **Output**: Cleaned fires dataset (`data/bdiff_data_clean/incendies_metropole_corse.parquet`).
+*   **`notebooks/prep_communes.ipynb`**
+    *   **Input**: INSEE municipalities list (`data/geo_data_raw/communes-france-2026.csv`).
+    *   **Output**: Cleaned cities dataset (`data/geo_data_clean/communes_metropole_corse.parquet`).
+
+### 2. Database Initialization
+*   **`init/01-schema.sql`, `02-ddl.sql`, `03-data.sql`**
+    *   **Input**: Cleaned Parquet datasets
+    *   **Output**: Containerized `postgis:17-3.5` database with the `incendies` schema and imported tables.
+
+### 3. Spatio-Temporal Grid & Feature Engineering
+*   **`notebooks/table_c_j.ipynb`**
+    *   **Input**: `commune` and `incendie` PostgreSQL tables
+    *   **Output**: Base daily grid `commune_jour` (PACA region, 2016-2025) and materialized views for spatial neighbors (`mv_communes_voisines_10km`, `20km`, `50km`)
+*   **`scripts/maj.py`**
+    *   **Input**: `commune_jour` table and materialized views
+    *   **Output**: Updates the daily grid with causal historical features (`nb_incendies_30j`, `90j`, `365j`, `surface_totale_5a`) and spatial contagion buffers (`buffer_10km`, `20km`, `50km`). *Note: Strictly uses past data to prevent data leakage*
+
+### 4. Machine Learning & MLflow Tracking
+*   **`notebooks/model_daily.ipynb`**
+    *   **Input**: `commune_jour` and `v_commune_paca` views from the database
+    *   **Output**: Trained ML models (LightGBM, XGBoost) and evaluation metrics
+    *   **Details**: Uses a strict spatio-temporal split (Train: 2016-2022, Val: 2023, Test: 2024+) and 1:10 downsampling for the negative class during Grid Search All runs are logged locally in `mlflow.db` under the `Prediction_Risque_Incendies` experiment
+
+### 5. Application (Front-End)
+*   **`app/streamlit/app.py`**
+    *   **Input**: PostgreSQL database (Historical Map) & MLflow Model Registry (Prediction).
+    *   **Output**: Interactive Streamlit Dashboard exposing fire risk predictions (Tab 2).
+
+## MLflow Tracking
+The MLflow UI is accessible at [http://127.0.0.1:5000](http://127.0.0.1:5000).
+The `Prediction_Risque_Incendies` experiment logs all model parameters, dataset shapes, and metrics (such as `pr_auc_validation` and `roc_auc_test_final`). 
+
+## Future Perspectives
+*   **Microservices Architecture**: Decouple the Streamlit frontend from the backend by deploying a FastAPI + Uvicorn prediction API for production scalability.
+*   **Meteorological Data**: Integrate external climate data (wind, drought indices) to overcome the current predictive ceiling (PR-AUC limitations) and capture immediate fire triggers
+
+
+-----
+-----
+-----
+-----
+
+
+-----
+-----
+-----
+-----
 
 ## Data prep
 
