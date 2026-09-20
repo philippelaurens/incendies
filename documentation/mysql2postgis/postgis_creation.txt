@@ -1,0 +1,352 @@
+
+DOCKER COMPOSE
+--------------
+
+Installation sur une instance EC2 (AWS) ou sur n'importe quelle machine avec docker installé (à adapter à Ubuntu/Debian)
+
+    # Install Docker 
+    sudo dnf update -y
+    sudo dnf install -y docker
+    sudo systemctl enable --now docker
+    sudo usermod -aG docker ec2-user
+
+    newgrp docker
+
+
+    # Docker Compose plugin
+    sudo mkdir -p /usr/local/lib/docker/cli-plugins
+    sudo curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" \
+      -o /usr/local/lib/docker/cli-plugins/docker-compose
+    sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+  o Buildx is Docker’s current image builder. Compose no longer uses the old docker build path by default. What each piece does:
+
+      dockerd — runs containers
+      Compose — reads docker-compose.yml, starts services
+      Buildx — builds images from your Dockerfile (app: build: ./app)
+
+    # Install Buildx
+    VER=$(curl -sL https://api.github.com/repos/docker/buildx/releases/latest | grep -oP '"tag_name": "\K[^"]+')
+    echo "version $VER"
+
+    sudo mkdir -p /usr/local/lib/docker/cli-plugins
+    sudo curl -fSL "https://github.com/docker/buildx/releases/download/${VER}/buildx-${VER}.linux-${BX_ARCH}" \
+      -o /usr/local/lib/docker/cli-plugins/docker-buildx
+    sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+
+
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            
+
+PostGis
+-------
+
+  o docker-compose.yml
+
+      services:
+        db:
+          image: postgis/postgis:17-3.5
+          container_name: postgis
+          environment:
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_DB: ${POSTGRES_DB}
+          ports:
+            # accessible uniquement localement
+            # - "127.0.0.1:5432:5432"  
+            # accessible depuis toutes les interfaces
+            - "5432:5432"  
+          volumes:
+            - postgis_data:/var/lib/postgresql/data
+            - ./init:/docker-entrypoint-initdb.d
+          networks:
+            - gis_net
+          healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+          restart: unless-stopped
+          
+        app:
+          build: ./streamlit/app
+          container_name: streamlit
+          environment:
+            POSTGRES_HOST: db
+            POSTGRES_PORT: 5432
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_DB: ${POSTGRES_DB}
+          ports:
+            - "8501:8501"
+          depends_on:
+            db:
+              condition: service_healthy
+          networks:
+            - gis_net
+          restart: unless-stopped    
+
+      volumes:
+        postgis_data:
+
+      networks:
+        gis_net:
+          name: gis_net
+          driver: bridge
+        
+
+      # .env
+      POSTGRES_USER=gis_app
+      POSTGRES_PASSWORD=xxxxx
+      POSTGRES_DB=incendies
+
+    
+      # fichier d'initialisation
+
+          ├── app
+          │   └── streamlit
+          │       ├── app.py
+          │       ├── Dockerfile
+          │       ├── popups.py
+          │       └── requirements.txt
+          ├── docker-compose.yml
+          └── init
+              ├── 01-schema.sql
+              ├── 02-tables.sql
+              └── 03-data.sql
+
+
+  o Create database and streamlit app
+  
+        (base) philippe@localhost: ~/work-plateforme/incendies $ docker compose down -v
+        (base) philippe@localhost: ~/work-plateforme/incendies $ docker compose up -d
+
+        (base) philippe@localhost: ~/work-plateforme/incendies $ docker compose ps
+        NAME        IMAGE                    COMMAND                  SERVICE   CREATED        STATUS                 PORTS
+        postgis     postgis/postgis:17-3.5   "docker-entrypoint.s…"   db        29 hours ago   Up 2 hours (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+        streamlit   incendies-prj-app        "streamlit run app.p…"   app       29 hours ago   Up 2 hours             0.0.0.0:8501->8501/tcp, [::]:8501->8501/tcp
+
+    - Export : 
+    
+        # sauvegarder uniquement le schéma incendies (dump)
+        docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --schema=incendies --format=custom --no-owner --no-privileges' > incendies_$(date +%Y%m%d).dump
+
+        # sauvegarder uniquement le schéma incendies (sql)
+        docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --schema=incendies --no-owner --no-privileges' > incendies_$(date +%Y%m%d).sql
+
+    - Import : 
+
+        # Création du schéma s'il n'existe pas
+        docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE SCHEMA IF NOT EXISTS incendies"'
+
+        # création avee le dump
+        docker compose cp incendies_20260911.dump db:/tmp/incendies.dump
+        docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges' < incendies_20260911.dump
+
+        # création avee le sql
+        docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < incendies_20260911.sql
+
+
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+                            - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+
+Création manuelle
+-----------------
+
+  o Create Database
+
+    (base) philippe@localhost: ~/work-plateforme/incendies $ docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
+    gis=# CREATE TABLE lieux (
+          id          bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+          nom         text NOT NULL,
+          latitude    double precision NOT NULL,
+          longitude   double precision NOT NULL,
+          valeur      double precision,
+          geom        geography(Point, 4326)
+              GENERATED ALWAYS AS (
+                  ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)::geography
+              ) STORED
+      );
+
+    gis=# CREATE INDEX lieux_geom_idx ON lieux USING gist (geom);
+
+    gis=# INSERT INTO lieux (nom, latitude, longitude, valeur)
+      VALUES
+          ('Tour Eiffel', 48.8584, 2.2945, 12.3),
+          ('Notre-Dame',  48.8530, 2.3499,  7.1),
+          ('Bordeaux',     44.8378, -0.5792, 1),
+          ('Toulouse',     43.6045,  1.4442, 1),
+          ('Carcassonne',  43.2130,  2.3514, 1),
+          ('Nice',         43.7102,  7.2620, 1),
+          ('Toulon',       43.1242,  5.9280, 1),
+          ('Alès',         44.1251,  4.0830, 1),
+          ('Lyon',         45.7640,  4.8357, 1),
+          ('Limoges',      45.8336,  1.2611, 1);          
+
+    gis=# SELECT id, nom, latitude, longitude, valeur,
+             ST_AsText(geom::geometry)
+      FROM lieux;
+     id |     nom     | latitude | longitude | valeur |       st_astext
+    ----+-------------+----------+-----------+--------+------------------------
+      1 | Tour Eiffel |  48.8584 |    2.2945 |   12.3 | POINT(2.2945 48.8584)
+      2 | Notre-Dame  |   48.853 |    2.3499 |    7.1 | POINT(2.3499 48.853)
+      3 | Bordeaux    |  44.8378 |   -0.5792 |      1 | POINT(-0.5792 44.8378)
+      4 | Toulouse    |  43.6045 |    1.4442 |      1 | POINT(1.4442 43.6045)
+      5 | Carcassonne |   43.213 |    2.3514 |      1 | POINT(2.3514 43.213)
+      6 | Nice        |  43.7102 |     7.262 |      1 | POINT(7.262 43.7102)
+      7 | Toulon      |  43.1242 |     5.928 |      1 | POINT(5.928 43.1242)
+      8 | Alès        |  44.1251 |     4.083 |      1 | POINT(4.083 44.1251)
+      9 | Lyon        |   45.764 |    4.8357 |      1 | POINT(4.8357 45.764)
+     10 | Limoges     |  45.8336 |    1.2611 |      1 | POINT(1.2611 45.8336)
+    (2 rows)
+
+
+  o Streamlit
+  
+      # Dockerfile
+      FROM python:3.12-slim
+
+      WORKDIR /app
+      COPY requirements.txt .
+      RUN pip install --no-cache-dir -r requirements.txt
+      COPY . .
+
+      EXPOSE 8501
+      CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+
+
+      # requirements.txt
+      streamlit
+      psycopg[binary]
+      pandas
+      folium
+      streamlit-folium
+
+      # app.py
+      import os
+      import streamlit as st
+      import psycopg
+
+      def get_conn():
+          return psycopg.connect(
+              host=os.environ["POSTGRES_HOST"],
+              port=os.environ.get("POSTGRES_PORT", "5432"),
+              user=os.environ["POSTGRES_USER"],
+              password=os.environ["POSTGRES_PASSWORD"],
+              dbname=os.environ["POSTGRES_DB"],
+          )
+
+      st.title("GIS")
+
+      with get_conn() as conn:
+          with conn.cursor() as cur:
+              cur.execute("SELECT postgis_version();")
+              version = cur.fetchone()[0]
+
+      st.write("PostGIS:", version)
+
+
+    - Folium place des marqueurs sur une carte Leaflet. Un marqueur = une paire lat / lon en degrés, éventuellement un libellé et une couleur liée à valeur. Il ne comprend pas geometry / geography PostGIS. Si vous lui passez geom, il faut d’abord extraire les coordonnées (ST_Y, ST_X) ou du GeoJSON (ST_AsGeoJSON). Les colonnes latitude / longitude évitent cette conversion pour une carte de points.
+            
+        # app.py
+        import os
+        import streamlit as st
+        import psycopg
+
+        import folium
+        from streamlit_folium import st_folium
+        from popups import site_popup
+
+        def get_conn():
+            return psycopg.connect(
+                host=os.environ["POSTGRES_HOST"],
+                port=os.environ.get("POSTGRES_PORT", "5432"),
+                user=os.environ["POSTGRES_USER"],
+                password=os.environ["POSTGRES_PASSWORD"],
+                dbname=os.environ["POSTGRES_DB"],
+            )
+
+        st.title("Terre, Vent, Feu, Eau, Data")
+
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT nom, latitude, longitude, valeur
+                    FROM lieux
+                    """
+                )
+                rows = cur.fetchall()
+
+        if rows:
+            lats = [lat for _, lat, lon, _ in rows]
+            lons = [lon for _, lat, lon, _ in rows]
+            m = folium.Map(
+                location=[sum(lats) / len(lats), sum(lons) / len(lons)],
+                zoom_start=6,
+            )
+        else:
+            m = folium.Map(location=[46.7, 2.5], zoom_start=6)
+
+        for nom, lat, lon, valeur in rows:
+            # folium.Marker(
+            #     location=[lat, lon],
+            #     popup=f"{nom} : {valeur}",
+            #     tooltip=nom,
+            # ).add_to(m)
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=max(3, min(8, float(valeur) / 3)),
+                color="#c1121f",
+                fill=True,
+                fill_color="#c1121f",
+                fill_opacity=0.8,
+                # popup=f"{nom} : {valeur}",
+                popup=site_popup(nom, valeur, unite="mm"),
+                tooltip=nom,
+            ).add_to(m)
+
+        st_folium(m, width=800, height=600)
+
+      Note : 
+      
+        # popups.py
+        import folium
+
+        def site_popup(nom, valeur, unite=""):
+            html = f"""
+            <div style="
+                font-family: 'Segoe UI', system-ui, sans-serif;
+                min-width: 180px;
+                padding: 10px 12px;
+            ">
+              <div style="
+                  font-size: 11px;
+                  letter-spacing: .08em;
+                  text-transform: uppercase;
+                  color: #8a8a8a;
+                  margin-bottom: 4px;
+              ">Site</div>
+              <div style="
+                  font-size: 10px;
+                  font-weight: 650;
+                  margin-bottom: 8px;
+              ">{nom}</div>
+              <div style="
+                  border-top: 1px solid #eee;
+                  padding-top: 8px;
+                  display: flex;
+                  align-items: baseline;
+                  gap: 8px;
+              ">
+                <span style="font-size: 12px; font-weight: 700; color: #c1121f;">
+                  {valeur}
+                </span>
+                <span style="font-size: 12px; color: #666;">{unite}</span>
+              </div>
+            </div>
+            """
+            return folium.Popup(html, max_width=260)
+

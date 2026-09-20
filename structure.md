@@ -1,0 +1,150 @@
+.
+├── README.md
+├── __pycache__
+│   └── config.cpython-311.pyc
+├── app
+│   ├── mlflow
+│   │   └── Dockerfile
+│   └── streamlit
+│       ├── Dockerfile
+│       ├── __pycache__
+│       │   └── app.cpython-311.pyc
+│       ├── app.py
+│       ├── models
+│       │   ├── lightgbm.skops
+│       │   └── xgb_model.joblib
+│       ├── popups.py
+│       └── requirements.txt
+├── consignes
+│   └── a_faire.md
+├── data
+│   ├── bdiff_data_clean
+│   │   └── incendies.parquet
+│   ├── bdiff_data_processed
+│   ├── bdiff_data_raw
+│   │   ├── Incendies1971.csv
+│   │   ├── Incendies1976.csv
+│   │   ├── Incendies1981.csv
+│   │   ├── Incendies1986.csv
+│   │   ├── Incendies1991.csv
+│   │   ├── Incendies1996.csv
+│   │   ├── Incendies2001.csv
+│   │   ├── Incendies2006.csv
+│   │   ├── Incendies2011.csv
+│   │   ├── Incendies2016.csv
+│   │   └── Incendies2021.csv
+│   ├── data_processed
+│   │   ├── incendies_features_v2.metadata.json
+│   │   └── incendies_features_v2.parquet
+│   ├── df_dataset.parquet
+│   ├── geo_data_clean
+│   │   ├── communes.parquet
+│   │   └── communes_metropole_corse.parquet
+│   ├── geo_data_processed
+│   ├── geo_data_raw
+│   │   ├── communes-france-2025.csv
+│   │   └── communes-france-avec-polygon-2026.geojson
+│   └── spatio_temp
+│       └── df_spatio_temp.parquet
+├── docker-compose.yml
+├── documentation
+│   ├── csv2mysql
+│   │   ├── Mep.txt
+│   │   ├── incendies.pdf
+│   │   └── incendies.png
+│   └── mysql2postgis
+│       └── postgis_creation.txt
+├── figures
+│   ├── carte_incendies.html
+│   ├── distribution_mensuelle_nb_incendies.png
+│   ├── evolution_annuelle_nb_incendies_surfaces_2011-2025.png
+│   ├── output.png
+│   └── surface_ha—Log.png
+├── init
+│   ├── 01-schema.sql
+│   ├── 02-ddl.sql
+│   └── 03-data.sql
+├── legacy
+│   ├── app_old.py
+│   ├── app_phil.py
+│   ├── csv2mysql
+│   │   └── incendies-database.ipynb
+│   ├── feat_eng.ipynb
+│   ├── mlflow.db.backup
+│   ├── model_daily_samples.ipynb
+│   ├── model_monthly.ipynb
+│   ├── obsolete
+│   │   └── feat_eng_daily.ipynb
+│   ├── table_c_j_past.ipynb
+│   └── tables_to_migrate.py
+├── mlflow.db
+├── notebooks
+│   ├── db_daily.ipynb
+│   ├── eda.ipynb
+│   ├── mlflow.db
+│   ├── mlruns
+│   │   └── 1
+│   │       └── models
+│   │           ├── m-075b804595d046acb05c33b1e5cd4157
+│   │           │   └── artifacts
+│   │           │       ├── MLmodel
+│   │           │       ├── conda.yaml
+│   │           │       ├── model.skops
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           ├── m-402821c97a3e4bf685b61fc5fe93206d
+│   │           │   └── artifacts
+│   │           │       ├── MLmodel
+│   │           │       ├── conda.yaml
+│   │           │       ├── model.skops
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           ├── m-4f58fe63d8da4385bfc301d0d9b648e0
+│   │           │   └── artifacts
+│   │           │       ├── MLmodel
+│   │           │       ├── conda.yaml
+│   │           │       ├── model.skops
+│   │           │       ├── python_env.yaml
+│   │           │       └── requirements.txt
+│   │           └── m-67b8908f2a7842c7b4c16dd491e7403d
+│   │               └── artifacts
+│   │                   ├── MLmodel
+│   │                   ├── conda.yaml
+│   │                   ├── model.skops
+│   │                   ├── python_env.yaml
+│   │                   └── requirements.txt
+│   ├── model_daily.ipynb
+│   ├── prep_bdiff.ipynb
+│   ├── prep_communes.ipynb
+│   └── table_c_j.ipynb
+├── pyproject.toml
+├── scripts
+│   ├── __pycache__
+│   │   └── maj.cpython-311.pyc
+│   └── maj.py
+├── src
+│   ├── __pycache__
+│   │   ├── config.cpython-311.pyc
+│   │   └── db.cpython-311.pyc
+│   ├── config.py
+│   ├── create_db_commune.ipynb
+│   ├── create_db_incendie.ipynb
+│   ├── db.py
+│   └── extract_daily_grid.py
+├── structure.md
+├── temp
+│   ├── consulte_la_bdd.py
+│   └── maj.txt
+├── utils
+│   ├── __pycache__
+│   │   ├── analysis_utils.cpython-311.pyc
+│   │   ├── cleaning_utils.cpython-311.pyc
+│   │   ├── dataset_utils.cpython-311.pyc
+│   │   └── feature_utils.cpython-311.pyc
+│   ├── analysis_utils.py
+│   ├── cleaning_utils.py
+│   ├── dataset_utils.py
+│   └── feature_utils.py
+└── uv.lock
+
+44 directories, 104 files

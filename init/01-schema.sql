@@ -1,0 +1,3 @@
+CREATE SCHEMA incendies AUTHORIZATION gis_app;
+
+CREATE EXTENSION IF NOT EXISTS postgis SCHEMA incendies;
